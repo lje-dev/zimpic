@@ -19,7 +19,7 @@ zimpic/
 ├── frontend/          # 기존 React
 ├── backend/           # 기존 Django, 이전 완료 전까지 비교용으로 유지
 ├── spring-backend/    # 신규 Spring Boot
-├── yolo-service/      # 신규 FastAPI
+├── yolo/              # 신규 FastAPI
 └── compose.yaml       # 로컬 기능 검증 후 작성
 ```
 

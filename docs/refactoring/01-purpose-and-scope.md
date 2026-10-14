@@ -60,6 +60,68 @@ fastapi
 postgres
 ```
 
+## 기술별 담당 기능
+
+목표 구조에서 사용자의 브라우저는 Spring Boot API만 호출한다. Spring Boot가 내부적으로 FastAPI를 호출하며, FastAPI는 YOLO 추론 결과만 반환한다.
+
+| 기술 | 담당 기능 |
+| --- | --- |
+| React | 이사 유형·평수·공간 정보 입력, 사진 선택 및 업로드, AI 탐지 결과와 bbox 표시, 사용자의 가구 확인·수정, 주소와 상세 조건 입력, 견적 결과와 3D 적재 화면 표시 |
+| Spring Boot | React 요청을 받는 API 제공, 업로드 이미지 처리, FastAPI 호출, `class_id`와 DB 가구 정보 매핑, 이미지·탐지 결과·견적 저장, 가구 크기·트럭 조합·거리·각종 비용 계산, 최종 결과 응답 |
+| FastAPI | Spring Boot가 전달한 이미지 수신, 요청·응답 데이터 검증, YOLO 모델 호출, `class_id`·클래스명·신뢰도·bbox 반환 |
+| YOLO | 이미지에서 가구 객체를 탐지하고 클래스 번호, 클래스명, 신뢰도, 경계 상자 좌표 생성 |
+| PostgreSQL | 사용자 입력, 이미지 정보, 가구 기준 정보, 탐지 결과, 요금 정책, 견적 결과 등 영속 데이터 저장 |
+| 외부 API | 주소 검색과 출발지·도착지 사이의 거리 등 견적 계산에 필요한 외부 정보 제공 |
+
+FastAPI와 YOLO는 사진 속 객체를 탐지할 뿐이며, 가구의 한글 이름과 기본 크기 조회, 견적 계산은 하지 않는다. 이 업무는 Spring Boot가 PostgreSQL의 데이터와 정책을 이용해 처리한다.
+
+## 전체 사용자 흐름
+
+```text
+1. 이사 기본 정보와 공간 사진 입력
+   사용자 → React → Spring Boot
+
+2. 사진 분석 요청
+   Spring Boot → FastAPI → YOLO
+
+3. 순수 탐지 결과 반환
+   YOLO → FastAPI → Spring Boot
+   반환값: class_id, class_name, confidence, bbox
+
+4. 가구 정보 결합 및 분석 결과 응답
+   Spring Boot → PostgreSQL에서 class_id에 해당하는 가구 조회
+   Spring Boot → 이미지와 탐지 결과 저장
+   Spring Boot → React에 가구명, 기본 크기, bbox 등을 응답
+
+5. 분석 결과 확인 및 상세 정보 입력
+   React → 탐지된 가구와 bbox 표시
+   사용자 → 가구 포함 여부·크기·추가 가구·주소·층수 등을 확인 또는 수정
+   React → Spring Boot에 확정된 견적 조건 전송
+
+6. 견적 산출
+   Spring Boot → PostgreSQL의 가구·차량·요금 정책 조회
+   Spring Boot → 필요하면 외부 API로 거리 조회
+   Spring Boot → 포장 크기, 트럭 조합, 기본·거리·계단·사다리차·특수 가구 비용 계산
+   Spring Boot → 견적과 적재 결과 저장 후 React에 응답
+
+7. 결과 표시
+   React → 예상 견적, 세부 비용, 추천 차량, 3D 적재 화면 표시
+```
+
+핵심 호출 관계를 줄이면 다음과 같다.
+
+```text
+사용자
+  ↓
+React
+  ↓ HTTP
+Spring Boot ─────→ PostgreSQL
+  │
+  └── HTTP ─────→ FastAPI ─────→ YOLO
+```
+
+Spring Boot가 FastAPI에 사진을 보내는 것은 맞지만, 실제 YOLO 추론을 수행하는 주체는 FastAPI 내부의 YOLO 모델이다. Spring Boot는 전체 업무 흐름을 조정하고 탐지 결과를 비즈니스 데이터와 결합하는 역할을 한다.
+
 ## 핵심 원칙
 
 - 사용자는 Spring Boot API만 호출한다.
