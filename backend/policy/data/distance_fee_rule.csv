@@ -4,3 +4,4 @@ truck_type,base_km,unit_km,per_unit_amount,is_active
 5T,20,10,30000,TRUE
 6T,20,10,30000,TRUE
 7_5T,20,10,40000,TRUE
+10T,20,10,50000,TRUE

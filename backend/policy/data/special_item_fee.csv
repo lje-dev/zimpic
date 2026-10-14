@@ -8,4 +8,4 @@ strongbox,금고 추가 비용,70000,TRUE
 fishbowl,어항 추가 비용,50000,TRUE
 fitness,헬스기구 추가 비용,50000,TRUE
 bed_stone,돌침대 분해/재조립 비용,200000,TRUE
-hanger_module,시스템행거 분해/재조립 비용,0,TRUE
+hanger_module,시스템행거 블록당 분해/재조립 비용,50000,TRUE
