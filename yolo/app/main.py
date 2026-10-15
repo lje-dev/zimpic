@@ -37,8 +37,8 @@ MODEL_PATH = Path(os.getenv("YOLO_MODEL_PATH", BASE_DIR / "weights" / "best_2602
 
 MODEL_VERSION = os.getenv("YOLO_MODEL_VERSION", "best_260204")
 DEVICE = os.getenv("YOLO_DEVICE", "cpu")
-IMAGE_SIZE = int(os.getenv("YOLO_IMAGE_SIZE"), 640)
-CONFIDENCE = float(os.getenv("YOLO_CONFIDENCE"), 0.4)
+IMAGE_SIZE = int(os.getenv("YOLO_IMAGE_SIZE", 640))
+CONFIDENCE = float(os.getenv("YOLO_CONFIDENCE", 0.4))
 
 
 
