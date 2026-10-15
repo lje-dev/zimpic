@@ -6,6 +6,7 @@
 
 1. [개편 목적과 범위](01-purpose-and-scope.md)
 2. [진행 순서](02-roadmap.md)
+3. [추후 보완 사항](03-production-checklist.md)
 
 ## 상세 가이드
 
