@@ -1,4 +1,4 @@
-# ===== Python / Django =====
+# ===== Django =====
 backend/venv/
 __pycache__/
 *.pyc
@@ -8,11 +8,10 @@ __pycache__/
 backend/config/settings.py
 backend/config/settings_local.py
 backend/.env
-
-# Django media/static
 backend/media/
 backend/staticfiles/
 
+# ===== FastAPI =====
 yolo/.venv
 
 # ===== Node / React =====
