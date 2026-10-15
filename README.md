@@ -54,3 +54,7 @@ flowchart LR
 ## 문서
 
 기획·정책·모델·API 상세는 [docs/](docs/README.md)에 있습니다.
+
+## 서비스별 로컬 실행
+
+- [FastAPI YOLO 추론 서버](yolo/README.md)
