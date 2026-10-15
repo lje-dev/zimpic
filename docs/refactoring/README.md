@@ -6,11 +6,12 @@
 
 1. [개편 목적과 범위](01-purpose-and-scope.md)
 2. [진행 순서](02-roadmap.md)
-3. [추후 보완 사항](03-production-checklist.md)
+3. [배포 전·후 추가 고려사항](03-production-checklist.md)
 
 ## 상세 가이드
 
 - [2. FastAPI YOLO 서버 분리](detail/02-fastapi.md)
+- [3. PostgreSQL 로컬 환경 준비](detail/03-postgresql.md)
 
 세부 구현 방법은 작업을 진행하면서 각 문서에 필요한 만큼 추가한다.
 

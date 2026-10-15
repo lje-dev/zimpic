@@ -47,7 +47,7 @@ zimpic/
 
 초기에는 워커 1개로 실행하고 메모리 사용량과 응답 시간을 측정한다. 상용 배포 전에는 사용 중인 Ultralytics 버전과 모델의 라이선스 조건도 확인한다.
 
-실제 이미지 형식과 픽셀 크기 검증을 포함한 보완 작업은 [추후 보완 사항](03-production-checklist.md)에 기록한다.
+실제 이미지 형식과 픽셀 크기 검증을 포함한 보완 작업은 [배포 전·후 추가 고려사항](03-production-checklist.md)에 기록한다.
 
 완료 기준: Docker 없이 실행한 FastAPI가 이미지에 대한 정상적인 탐지 JSON을 반환한다.
 
@@ -55,15 +55,16 @@ zimpic/
 
 Docker를 적용하기 전에는 로컬에 설치한 PostgreSQL을 사용할 수 있다.
 
-1. 로컬 PostgreSQL에 `zimpic` DB와 사용자를 생성한다.
-2. `psql`로 접속해 DB 연결을 확인한다.
-3. 테이블 구조를 정의한다.
-4. 기존 정책 CSV 데이터를 적재한다.
-5. DB 테이블 변경 이력을 관리할 방법을 결정한다.
+상세 진행 방법은 [PostgreSQL 로컬 환경 준비 가이드](detail/03-postgresql.md)를 참고한다.
 
-Flyway를 사용하면 테이블 생성과 변경 SQL을 버전별 파일로 남기고 Spring Boot 실행 시 순서대로 적용할 수 있다. 사용 여부는 Spring Boot DB 구성을 시작할 때 결정한다.
+1. PostgreSQL을 설치하고 실행한다.
+2. `zimpic` DB와 Spring Boot에서 사용할 사용자를 생성한다.
+3. `psql`로 접속해 DB 연결을 확인한다.
+4. Spring Boot에 입력할 DB 주소, 사용자명과 비밀번호를 확인한다.
 
-완료 기준: `psql`로 접속할 수 있고 정책 데이터를 조회할 수 있다.
+이 단계에서는 테이블을 직접 만들거나 데이터를 추가하지 않는다. 테이블은 4번에서 JPA Entity를 작성한 뒤 Spring Boot가 자동으로 생성하도록 한다.
+
+완료 기준: 로컬 PostgreSQL의 `zimpic` DB에 지정한 사용자로 접속할 수 있다.
 
 ## 4. Spring Boot 구현 및 로컬 실행
 
@@ -72,10 +73,24 @@ Spring Boot는 처음에 최소 연결을 확인한 뒤 기존 기능을 단계�
 ### 기본 연결
 
 1. Java 21과 Spring Boot 3.x 프로젝트를 만든다.
-2. `/health` API를 만든다.
-3. 로컬 PostgreSQL에 연결해 저장과 조회를 확인한다.
-4. 로컬 FastAPI의 `/health`와 추론 API를 호출한다.
-5. FastAPI 호출에 연결 및 응답 타임아웃과 오류 처리를 적용한다.
+2. PostgreSQL 연결 정보를 설정한다.
+3. JPA Entity를 작성하고 개발 환경의 `ddl-auto`를 `update`로 설정해 테이블을 자동 생성한다.
+4. Repository를 작성하고 데이터 저장과 조회를 확인한다.
+5. 기존 정책 CSV의 초기 데이터를 추가하고 조회를 확인한다.
+6. `/health` API를 만든다.
+7. 로컬 FastAPI의 `/health`와 추론 API를 호출한다.
+8. FastAPI 호출에 연결 및 응답 타임아웃과 오류 처리를 적용한다.
+
+개발 중에는 JPA Entity 변경을 테이블에 반영하기 위해 `ddl-auto: update`를 사용한다. 운영 배포 전에 운영 환경의 테이블 관리 방식은 다시 검토한다.
+
+구현부는 역할에 따라 다음과 같이 분리한다.
+
+- Entity: PostgreSQL 테이블과 연결되는 객체
+- Repository: 데이터 저장 및 조회
+- Service: 견적 계산과 같은 비즈니스 로직
+- Controller: React 요청을 받고 응답 반환
+- DTO: API 요청 및 응답 형식
+- FastAPI Client: Spring Boot에서 FastAPI 호출
 
 Docker를 사용하지 않는 이 단계의 연결 주소는 다음과 같다.
 
