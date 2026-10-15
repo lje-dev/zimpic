@@ -11,7 +11,7 @@ def load_model(model_path: Path, device: str):
 
 
 # 이미지에서 객체 추론 
-@ThreadingLocked # 동시성 제어
+@ThreadingLocked() # 동시성 제어
 def run_inference(model, image_path: Path, image_size: int, confidencd: float):
     
     ########## 이미지에서 객체 탐지 ########## 
@@ -72,6 +72,6 @@ def run_inference(model, image_path: Path, image_size: int, confidencd: float):
             }
         )
 
-        # 전체 탐지 결과 반환
-        return detections
+    # 전체 탐지 결과 반환
+    return detections
 
