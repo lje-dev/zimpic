@@ -129,6 +129,7 @@ curl http://127.0.0.1:8000/health
 | Validation                 | API 요청값 검증                                              |
 | Spring Boot Actuator       | 애플리케이션과 DB 상태 확인                                  |
 | HTTP Client (`RestClient`) | FastAPI와 Kakao API를 호출하는 동기식 HTTP 클라이언트        |
+| OpenAPI·Swagger UI         | Controller와 DTO를 분석해 API 문서를 생성하고 브라우저에서 확인 |
 | Lombok                     | 반복되는 Getter와 생성자 코드 간소화                         |
 
 처음에는 Spring Security, WebFlux와 Flyway를 추가하지 않는다.
@@ -343,7 +344,37 @@ PostgreSQL을 중지하면 DB 상태 확인이 실패하므로 전체 health 상
 - `/health`가 정상 응답을 반환한다.
 - PostgreSQL 연결 성공 여부가 health 상태에 반영된다.
 
-## 7. 패키지 구조
+## 7. OpenAPI와 Swagger UI 확인
+
+Django와 FastAPI에서 사용하던 것처럼 Spring Boot에서도 실행 중인 API 목록과 요청·응답 형식을 브라우저에서 확인할 수 있다.
+
+Spring Boot에는 Swagger UI가 기본으로 포함되어 있지 않다. 이 프로젝트는 생성 단계에서 추가한 `springdoc-openapi`를 사용한다. `springdoc-openapi`는 Spring MVC의 Controller, 요청 경로, 요청 DTO와 응답 DTO를 분석해 OpenAPI 문서를 자동으로 생성한다.
+
+앞 단계에서 `/health`를 확인한 Spring Boot를 계속 실행한 상태로 다음 주소를 확인한다.
+
+| 용도 | 주소 |
+| --- | --- |
+| Swagger UI | `http://127.0.0.1:8080/swagger-ui.html` |
+| OpenAPI JSON | `http://127.0.0.1:8080/v3/api-docs` |
+| OpenAPI YAML | `http://127.0.0.1:8080/v3/api-docs.yaml` |
+
+브라우저에서 Swagger UI 주소를 열면 `/swagger-ui/index.html`로 이동할 수 있다. 화면이 표시되면 Swagger UI가 정상적으로 등록된 것이다.
+
+OpenAPI JSON은 브라우저에서 열거나 다음 명령으로 확인한다.
+
+```bash
+curl http://127.0.0.1:8080/v3/api-docs
+```
+
+현재는 직접 작성한 Controller가 없으므로 Swagger UI에 표시되는 API가 없거나 적은 것이 정상이다. 이후 `@GetMapping`, `@PostMapping` 등이 선언된 Controller를 만들면 해당 API가 자동으로 추가된다. Actuator의 `/health`는 일반 Controller가 아니므로 기본 Swagger 문서에 표시되지 않을 수 있다.
+
+완료 기준은 다음과 같다.
+
+- `/swagger-ui.html`에 접속할 수 있다.
+- `/v3/api-docs`가 OpenAPI JSON을 반환한다.
+- 현재 구현 단계에서는 문서화된 자체 API가 없을 수 있음을 확인한다.
+
+## 8. 패키지 구조
 
 이 프로젝트에서는 Controller, Service, Repository처럼 역할을 먼저 구분하는 계층형 패키지 구조를 사용한다. Spring Boot를 처음 학습할 때 요청이 각 계층을 통과하는 흐름을 확인하기 쉽고, 현재 프로젝트 규모에서도 충분히 관리할 수 있다.
 
@@ -409,7 +440,7 @@ Controller가 Repository를 직접 호출하거나 Repository가 Service를 호�
 
 JPA Entity를 Controller 응답으로 직접 반환하지 않고 기존 React API 형식에 맞는 DTO를 별도로 작성한다.
 
-## 8. 공통 API 응답과 오류 처리
+## 9. 공통 API 응답과 오류 처리
 
 Spring Boot API는 성공과 실패 응답을 일관된 JSON 형식으로 반환한다. HTTP 상태 코드는 요청 처리 결과에 맞게 사용하고, JSON 안에 `status`를 중복해서 넣지 않는다.
 
@@ -549,6 +580,10 @@ HTTP/1.1 404 Not Found
 ```
 
 ```java
+package com.zimpic.backend.dto.response;
+
+import com.zimpic.backend.exception.ErrorCode;
+
 public record ErrorResponse(
     boolean success,
     String code,
@@ -560,7 +595,82 @@ public record ErrorResponse(
 }
 ```
 
-`ErrorCode`에는 공통으로 사용할 기본 메시지를 작성하고, 특정 상황에 더 자세한 설명이 필요하면 `BusinessException`을 만들 때 메시지를 전달한다. 별도 메시지를 전달하지 않으면 `ErrorCode`의 기본 메시지를 사용한다.
+`ErrorResponse`와 `ErrorCode`는 서로 다른 패키지에 있으므로 `ErrorCode`를 import해야 한다. `of()`는 Java 예약어가 아니라 오류 코드와 메시지로 실패 응답 객체를 만드는 정적 팩토리 메서드다. `errorCode.name()`은 enum 상수 이름을 `FURNITURE_NOT_FOUND`와 같은 문자열로 반환한다.
+
+### ErrorCode
+
+`ErrorCode`는 오류마다 사용할 HTTP 상태와 기본 메시지를 한곳에서 관리한다. 처음에는 현재 단계와 이후 외부 API 연동에서 공통으로 사용할 최소 항목만 정의하고, 새로운 업무 오류가 생길 때 구체적인 코드를 추가한다.
+
+```java
+package com.zimpic.backend.exception;
+
+import org.springframework.http.HttpStatus;
+
+public enum ErrorCode {
+    // 요청과 데이터 조회 오류
+    INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청값을 확인해 주세요."),
+    FURNITURE_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 가구 정보를 찾을 수 없습니다."),
+    BUSINESS_RULE_VIOLATION(HttpStatus.UNPROCESSABLE_CONTENT, "처리할 수 없는 요청입니다."),
+
+    // FastAPI와 Kakao API 같은 외부 서비스 호출 오류
+    EXTERNAL_API_BAD_RESPONSE(HttpStatus.BAD_GATEWAY, "외부 서비스 응답을 처리할 수 없습니다."),
+    EXTERNAL_API_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "외부 서비스 응답 시간이 초과되었습니다."),
+
+    // 예상하지 못한 서버 내부 오류
+    INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
+
+    // 클라이언트에 반환할 HTTP 상태와 기본 메시지
+    private final HttpStatus httpStatus;
+    private final String defaultMessage;
+
+    // 각 enum 상수의 상태와 메시지를 저장한다.
+    ErrorCode(HttpStatus httpStatus, String defaultMessage) {
+        this.httpStatus = httpStatus;
+        this.defaultMessage = defaultMessage;
+    }
+
+    // GlobalExceptionHandler에서 HTTP 응답 상태를 만들 때 사용한다.
+    public HttpStatus httpStatus() {
+        return httpStatus;
+    }
+
+    // 별도 메시지가 없을 때 사용자 응답에 사용할 메시지를 반환한다.
+    public String defaultMessage() {
+        return defaultMessage;
+    }
+}
+```
+
+enum 상수 뒤의 괄호는 각 상수를 만들 때 생성자에 전달하는 값이다. 예를 들어 `FURNITURE_NOT_FOUND`는 `HttpStatus.NOT_FOUND`와 기본 메시지를 보관한다. enum 생성자는 외부에서 직접 호출하지 않으므로 접근제어자를 작성하지 않는다.
+
+### BusinessException
+
+`BusinessException`은 요청 형식은 맞지만 가구를 찾지 못했거나 업무 규칙을 만족하지 못하는 것처럼 애플리케이션이 의도적으로 사용자에게 알려야 하는 오류를 나타낸다. 예외 처리 흐름에 참여할 수 있도록 `RuntimeException`을 상속한다.
+
+```java
+package com.zimpic.backend.exception;
+
+public class BusinessException extends RuntimeException {
+    private final ErrorCode errorCode;
+
+    public BusinessException(ErrorCode errorCode) {
+        this(errorCode, errorCode.defaultMessage());
+    }
+
+    public BusinessException(ErrorCode errorCode, String message) {
+        super(message);
+        this.errorCode = errorCode;
+    }
+
+    public ErrorCode errorCode() {
+        return errorCode;
+    }
+}
+```
+
+첫 번째 생성자는 `ErrorCode`의 기본 메시지를 사용한다. `this(...)`는 같은 클래스의 다른 생성자를 호출하는 문법이다. 두 번째 생성자는 상황에 맞는 메시지를 직접 전달할 때 사용하며, `super(message)`로 부모인 `RuntimeException`에 메시지를 저장한다.
+
+다음 코드는 `ErrorResponse.java`나 `BusinessException.java` 안에 작성하는 코드가 아니라, 이후 Service에서 예외를 발생시킬 때의 사용 예시다. 별도 메시지를 전달하지 않으면 `ErrorCode`의 기본 메시지를 사용한다.
 
 ```java
 throw new BusinessException(ErrorCode.FURNITURE_NOT_FOUND);
@@ -572,6 +682,60 @@ throw new BusinessException(
     "가구 ID " + furnitureId + "에 해당하는 정보를 찾을 수 없습니다."
 );
 ```
+
+`throw`가 실행되면 현재 메서드의 정상 처리가 중단되고 발생한 예외가 호출한 쪽으로 전달된다.
+
+### GlobalExceptionHandler
+
+`GlobalExceptionHandler`는 Controller 처리 중 발생한 예외를 한곳에서 받아 HTTP 상태와 `ErrorResponse`로 변환한다. `@RestControllerAdvice`를 사용하면 모든 REST Controller에 공통으로 적용된다.
+
+```java
+package com.zimpic.backend.exception;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import com.zimpic.backend.dto.response.ErrorResponse;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ErrorResponse> handleBusinessException(
+        BusinessException exception
+    ) {
+        ErrorCode errorCode = exception.errorCode();
+        ErrorResponse response = ErrorResponse.of(errorCode, exception.getMessage());
+
+        return ResponseEntity
+            .status(errorCode.httpStatus())
+            .body(response);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleUnexpectedException(
+        Exception exception
+    ) {
+        log.error("Unexpected exception", exception);
+
+        ErrorCode errorCode = ErrorCode.INTERNAL_SERVER_ERROR;
+        ErrorResponse response = ErrorResponse.of(
+            errorCode,
+            errorCode.defaultMessage()
+        );
+
+        return ResponseEntity
+            .status(errorCode.httpStatus())
+            .body(response);
+    }
+}
+```
+
+`BusinessException`은 정해진 오류 코드와 사용자 메시지를 그대로 응답에 사용한다. 그 밖의 예상하지 못한 예외는 전체 내용을 서버 로그에 기록하되, 응답에는 예외 클래스명이나 원문을 넣지 않고 공통 `500` 메시지만 반환한다. 요청 DTO의 Validation 오류를 `400`으로 변환하는 처리는 실제 요청 DTO를 구현할 때 추가한다.
 
 기본 HTTP 상태 기준은 다음과 같다.
 
@@ -591,7 +755,133 @@ throw new BusinessException(
 
 공통 응답 형식은 기존 Django API 응답을 감싸는 새로운 계약이다. Django와 계산 결과를 비교할 때는 `data` 내부 값을 비교하고, React를 Spring Boot에 연결하는 단계에서 `response.data`를 읽도록 API 서비스 코드를 함께 변경한다.
 
-## 9. JPA 최소 연결 확인
+### 공통 응답과 오류 처리 최소 테스트
+
+아직 실제 Controller와 Service가 없으므로 Spring 전체 실행 환경을 불러오지 않는 단위 테스트로 각 객체와 Handler의 기본 동작을 확인한다. 다음 파일을 만든다.
+
+```text
+spring-backend/src/test/java/com/zimpic/backend/exception/CommonResponseTest.java
+```
+
+```java
+package com.zimpic.backend.exception;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+
+import com.zimpic.backend.dto.response.ApiResponse;
+import com.zimpic.backend.dto.response.ErrorResponse;
+
+class CommonResponseTest {
+
+    @Test
+    void successResponseContainsData() {
+        ApiResponse<String> response = ApiResponse.success("data");
+
+        assertTrue(response.success());
+        assertEquals("data", response.data());
+    }
+
+    @Test
+    void errorResponseContainsCodeAndMessage() {
+        ErrorResponse response = ErrorResponse.of(
+            ErrorCode.FURNITURE_NOT_FOUND,
+            "가구를 찾을 수 없습니다."
+        );
+
+        assertFalse(response.success());
+        assertEquals("FURNITURE_NOT_FOUND", response.code());
+        assertEquals("가구를 찾을 수 없습니다.", response.message());
+    }
+
+    @Test
+    void businessExceptionUsesDefaultMessage() {
+        BusinessException exception = new BusinessException(
+            ErrorCode.FURNITURE_NOT_FOUND
+        );
+
+        assertSame(ErrorCode.FURNITURE_NOT_FOUND, exception.errorCode());
+        assertEquals(
+            ErrorCode.FURNITURE_NOT_FOUND.defaultMessage(),
+            exception.getMessage()
+        );
+    }
+
+    @Test
+    void businessExceptionCanUseCustomMessage() {
+        BusinessException exception = new BusinessException(
+            ErrorCode.FURNITURE_NOT_FOUND,
+            "가구 ID 1을 찾을 수 없습니다."
+        );
+
+        assertEquals("가구 ID 1을 찾을 수 없습니다.", exception.getMessage());
+    }
+
+    @Test
+    void handlerConvertsBusinessExceptionToHttpResponse() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        BusinessException exception = new BusinessException(
+            ErrorCode.FURNITURE_NOT_FOUND
+        );
+
+        ResponseEntity<ErrorResponse> response =
+            handler.handleBusinessException(exception);
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertFalse(response.getBody().success());
+        assertEquals("FURNITURE_NOT_FOUND", response.getBody().code());
+        assertEquals(
+            ErrorCode.FURNITURE_NOT_FOUND.defaultMessage(),
+            response.getBody().message()
+        );
+    }
+
+    @Test
+    void handlerHidesUnexpectedExceptionDetails() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+
+        ResponseEntity<ErrorResponse> response =
+            handler.handleUnexpectedException(
+                new IllegalStateException("DB password exposed")
+            );
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("INTERNAL_SERVER_ERROR", response.getBody().code());
+        assertEquals(
+            ErrorCode.INTERNAL_SERVER_ERROR.defaultMessage(),
+            response.getBody().message()
+        );
+    }
+}
+```
+
+테스트를 실행한다.
+
+```powershell
+.\gradlew.bat test --tests "com.zimpic.backend.exception.CommonResponseTest"
+```
+
+이 테스트는 공통 객체와 Handler 메서드의 최소 동작만 검증한다. `@RestControllerAdvice`가 실제 HTTP 요청에서 적용되고 JSON이 원하는 형태로 반환되는지는 첫 Controller를 구현한 뒤 `MockMvc` 통합 테스트로 다시 확인한다.
+
+완료 기준은 다음과 같다.
+
+- 정상 응답이 `success=true`와 전달한 데이터를 보관한다.
+- 실패 응답이 `success=false`, 오류 코드와 메시지를 보관한다.
+- `BusinessException`이 기본 메시지와 직접 지정한 메시지를 구분한다.
+- 업무 예외가 지정한 HTTP 상태와 오류 응답으로 변환된다.
+- 예상하지 못한 예외의 원문이 사용자 응답에 포함되지 않는다.
+- `CommonResponseTest`의 전체 테스트가 통과한다.
+
+## 10. JPA 최소 연결 확인
 
 처음부터 Django 모델 전체를 옮기지 않고 `Furniture` 하나로 JPA 연결을 검증한다.
 
@@ -630,7 +920,7 @@ spring.jpa.hibernate.ddl-auto=update
 
 `update`는 로컬 개발에서만 사용한다. 운영 환경에서는 Flyway 같은 마이그레이션 도구와 `validate` 사용을 검토한다.
 
-## 10. 전체 Entity와 테이블 구조 구현
+## 11. 전체 Entity와 테이블 구조 구현
 
 기존 Django의 `policy`, `vision`, `estimates` 모델을 JPA Entity로 옮기고 PostgreSQL 전체 테이블 구조를 만든다. 이 단계에서는 테이블의 컬럼, 제약조건과 관계만 구현하며 실제 정책 행이나 사용자 데이터는 아직 추가하지 않는다.
 
@@ -705,9 +995,9 @@ Entity 연관관계는 실제로 필요한 방향만 만들고 모든 관계를 
 
 전체 Entity 구현이 끝나면 정책 9개, 이미지·탐지 2개, 견적 7개로 총 18개 테이블이 생성되어야 한다. Django 모델의 `db_table` 이름을 유지해 기존 구조와 비교하기 쉽게 한다.
 
-## 11. 개발용 정책 기준 데이터 적재
+## 12. 개발용 정책 기준 데이터 적재
 
-10번에서 생성한 정책 테이블에 견적 계산에 필요한 실제 기준 데이터를 넣는다. 기존 정책 CSV는 `backend/policy/data/`에 있으며, Django를 비교용으로 보존해야 하므로 원본 파일은 수정하거나 이동하지 않는다.
+11번에서 생성한 정책 테이블에 견적 계산에 필요한 실제 기준 데이터를 넣는다. 기존 정책 CSV는 `backend/policy/data/`에 있으며, Django를 비교용으로 보존해야 하므로 원본 파일은 수정하거나 이동하지 않는다.
 
 정책 Entity를 모두 작성하고 Spring Boot를 실행해 JPA 테이블 생성을 확인한 뒤, 기존 CSV를 기준으로 개발용 INSERT SQL을 작성한다. 이 SQL은 Java 패키지나 애플리케이션 리소스가 아니라 다음 위치에서 별도로 관리한다.
 
@@ -745,9 +1035,9 @@ psql -h localhost -p 5432 -U zimpic_user -d zimpic \
 SELECT COUNT(*) FROM furniture;
 ```
 
-이 SQL은 로컬 기능 개발을 위한 임시 초기화 수단이다. 서버를 시작할 때마다 자동 실행하지 않으며, DB에서 수정한 정책값을 다시 덮어쓰지 않는다. 전체 로컬 테스트가 완료되면 21번의 안내에 따라 최종 스키마와 정책 데이터를 Flyway migration으로 옮긴다.
+이 SQL은 로컬 기능 개발을 위한 임시 초기화 수단이다. 서버를 시작할 때마다 자동 실행하지 않으며, DB에서 수정한 정책값을 다시 덮어쓰지 않는다. 전체 로컬 테스트가 완료되면 22번의 안내에 따라 최종 스키마와 정책 데이터를 Flyway migration으로 옮긴다.
 
-## 12. 정책 조회 API 이전
+## 13. 정책 조회 API 이전
 
 가장 먼저 이전할 실제 API는 가구 정책 조회로 한다.
 
@@ -765,7 +1055,7 @@ GET /api/policy/furniture/
 - 숫자 표현
 - 회전 가능 정보
 
-## 13. FastAPI Health 호출
+## 14. FastAPI Health 호출
 
 Spring Boot에서 FastAPI를 호출할 때는 Spring `RestClient`를 사용한다.
 
@@ -788,7 +1078,7 @@ FastAPI 주소는 코드에 직접 작성하지 않고 `yolo.base-url` 설정에
 
 FastAPI의 내부 예외나 응답 전체를 사용자에게 그대로 노출하지 않는다.
 
-## 14. FastAPI 추론 API 호출
+## 15. FastAPI 추론 API 호출
 
 호출 형식은 다음과 같다.
 
@@ -836,7 +1126,7 @@ FastAPI의 `snake_case` JSON과 Java의 `camelCase` 필드가 정확하게 매�
 - FastAPI 추론 실패
 - 잘못된 JSON 응답
 
-## 15. Vision 기능 이전
+## 16. Vision 기능 이전
 
 FastAPI 연결이 확인되면 기존 `/api/vision/` 흐름을 옮긴다.
 
@@ -860,7 +1150,7 @@ FastAPI 호출과 같이 오래 걸릴 수 있는 외부 요청 동안 DB 트랜
 POST /api/vision/
 ```
 
-## 16. 견적 기능 이전
+## 17. 견적 기능 이전
 
 견적 기능은 다음 순서로 하나씩 옮긴다.
 
@@ -890,7 +1180,7 @@ POST /api/vision/
 POST /api/estimates/
 ```
 
-## 17. 테스트
+## 18. 테스트
 
 ### 단위 테스트
 
@@ -937,7 +1227,7 @@ DB나 외부 API 없이 계산 로직을 검증한다.
 - 계단 또는 사다리차 포함 견적
 - 장거리 이사 견적
 
-## 18. 작업 체크포인트
+## 19. 작업 체크포인트
 
 ### 체크포인트 1. 프로젝트 실행
 
@@ -981,7 +1271,7 @@ DB나 외부 API 없이 계산 로직을 검증한다.
 - `/api/estimates/` 호환
 - Django 결과 비교
 
-## 19. 완료 기준
+## 20. 완료 기준
 
 - Java 21과 Spring Boot 4.1.1로 실행된다.
 - PostgreSQL의 `zimpic` DB를 사용한다.
@@ -994,13 +1284,13 @@ DB나 외부 API 없이 계산 로직을 검증한다.
 - DB 비밀번호와 Kakao API 키가 Git에 포함되지 않는다.
 - 기존 Django 백엔드는 비교가 끝날 때까지 보존된다.
 
-## 20. 추가로 결정할 사항
+## 21. 추가로 결정할 사항
 
 기존 Django에는 정책을 수정할 수 있는 Admin 기능이 있지만 현재 로드맵에는 Spring Boot 전환 이후의 관리자 기능이 정의되어 있지 않다.
 
 초기 Spring Boot 이전에서는 정책 조회와 개발용 Seed SQL 적재까지만 구현한다. Django를 제거하기 전에는 별도 관리자 화면, 제한된 관리 API 또는 다른 운영 방식을 결정해야 한다.
 
-## 21. 배포 전 Flyway 전환
+## 22. 배포 전 Flyway 전환
 
 이 문서의 로컬 기능 개발 단계에서는 `ddl-auto=update`로 JPA가 테이블을 만들고 `db/seed/*.sql`을 한 번 수동 실행한다. React까지 연결한 전체 로컬 테스트가 끝나면 Docker 이미지를 만들기 전에 로드맵 6번에서 Flyway로 전환한다.
 
