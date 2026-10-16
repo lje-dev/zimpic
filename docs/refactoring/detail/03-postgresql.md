@@ -66,6 +66,39 @@ psql --version
 
 `psql`은 PostgreSQL 서버에 접속해 SQL을 실행하는 터미널 프로그램이다. `psql --version`이 성공하더라도 PostgreSQL 서버가 실행 중이지 않으면 DB에 접속할 수 없다.
 
+macOS에서 Homebrew로 설치했다면 다음 명령으로 PostgreSQL 서비스 상태를 확인한다.
+
+```bash
+brew services list | grep postgresql
+```
+
+`postgresql@17`의 상태가 `started`이면 서비스가 실행 중이다. PostgreSQL이 실제로 요청을 받을 수 있는지는 다음 명령으로 확인한다.
+
+```bash
+pg_isready -h 127.0.0.1 -p 5432
+```
+
+정상적으로 실행 중이면 다음과 같이 `accepting connections`가 표시된다.
+
+```text
+127.0.0.1:5432 - accepting connections
+```
+
+Homebrew로 설치한 PostgreSQL 서비스는 다음 명령으로 관리한다.
+
+```bash
+# 중지
+brew services stop postgresql@17
+
+# 시작
+brew services start postgresql@17
+
+# 재시작
+brew services restart postgresql@17
+```
+
+서비스를 중지한 뒤 `pg_isready`를 실행했을 때 `no response`가 표시되는 것은 정상이다.
+
 Windows에서 공식 설치 프로그램을 사용했다면 PostgreSQL 서버는 일반적으로 Windows 서비스로 등록되어 자동 실행된다.
 
 다음 명령으로 접속이 되는지 확인한다.
@@ -75,6 +108,7 @@ psql -U postgres
 ```
 
 - `-U postgres`: `postgres` 사용자로 접속
+- mac에서는 `psql -U <mac 사용자명> -d postgres`
 - 비밀번호: PostgreSQL 설치 중 지정한 관리자 비밀번호
 - 비밀번호 입력 중 문자가 화면에 표시되지 않는 것은 정상
 
