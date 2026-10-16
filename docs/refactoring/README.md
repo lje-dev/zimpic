@@ -12,6 +12,7 @@
 
 - [2. FastAPI YOLO 서버 분리](detail/02-fastapi.md)
 - [3. PostgreSQL 로컬 환경 준비](detail/03-postgresql.md)
+- [4. Spring Boot 백엔드 준비 및 단계별 구현](detail/04-spring-boot.md)
 
 세부 구현 방법은 작업을 진행하면서 각 문서에 필요한 만큼 추가한다.
 

@@ -7,6 +7,7 @@
 → FastAPI 분리 및 로컬 실행
 → Spring Boot 구현 및 로컬 실행
 → React 연결 및 전체 로컬 테스트
+→ Flyway로 DB 스키마와 초기 데이터 확정
 → Dockerfile 작성
 → Docker Compose 로컬 통합 테스트
 → AWS EC2 배포
@@ -70,18 +71,20 @@ Docker를 적용하기 전에는 로컬에 설치한 PostgreSQL을 사용할 수
 
 Spring Boot는 처음에 최소 연결을 확인한 뒤 기존 기능을 단계적으로 옮긴다.
 
+상세 진행 방법은 [Spring Boot 백엔드 준비 및 단계별 구현 가이드](detail/04-spring-boot.md)를 참고한다.
+
 ### 기본 연결
 
-1. Java 21과 Spring Boot 3.x 프로젝트를 만든다.
+1. Java 21과 Spring Boot 4.1.1 프로젝트를 만든다.
 2. PostgreSQL 연결 정보를 설정한다.
 3. JPA Entity를 작성하고 개발 환경의 `ddl-auto`를 `update`로 설정해 테이블을 자동 생성한다.
 4. Repository를 작성하고 데이터 저장과 조회를 확인한다.
-5. 기존 정책 CSV의 초기 데이터를 추가하고 조회를 확인한다.
+5. JPA가 테이블을 생성한 뒤 정책 초기 데이터 SQL을 한 번 실행하고 조회를 확인한다.
 6. `/health` API를 만든다.
 7. 로컬 FastAPI의 `/health`와 추론 API를 호출한다.
 8. FastAPI 호출에 연결 및 응답 타임아웃과 오류 처리를 적용한다.
 
-개발 중에는 JPA Entity 변경을 테이블에 반영하기 위해 `ddl-auto: update`를 사용한다. 운영 배포 전에 운영 환경의 테이블 관리 방식은 다시 검토한다.
+개발 중에는 JPA Entity 변경을 테이블에 반영하기 위해 `ddl-auto=update`를 사용한다. 전체 로컬 테스트가 끝나면 6번에서 Flyway로 테이블과 초기 데이터 생성 과정을 확정한다.
 
 구현부는 역할에 따라 다음과 같이 분리한다.
 
@@ -124,7 +127,39 @@ PostgreSQL: jdbc:postgresql://localhost:5432/zimpic
 
 완료 기준: Docker 없이 로컬에서 전체 사용자 흐름이 정상 동작한다.
 
-## 6. 서비스별 Dockerfile 작성 및 실행
+## 6. Flyway로 DB 스키마와 초기 데이터 확정
+
+로컬 기능 개발 중에는 JPA가 테이블을 자동으로 변경하지만, Docker와 운영 환경에서는 빈 DB를 항상 같은 구조와 초기 데이터로 준비할 수 있어야 한다.
+
+DB 스키마 관리 방식은 이 단계부터 다음과 같이 전환한다.
+
+- 개발 중: Entity 수정 후 JPA의 `ddl-auto=update`로 로컬 DB에 자동 반영
+- 최초 배포 준비: Flyway를 도입하고 `ddl-auto=validate`로 변경
+- 운영 이후: Entity 수정과 Flyway 마이그레이션 SQL 추가를 함께 진행
+- 일반 데이터: 테이블 DDL이 아니라 기존 API와 JPA를 통해 조회·수정
+
+1. 최종 JPA Entity와 PostgreSQL 테이블 구조를 비교한다.
+2. Spring Boot에 Flyway 의존성을 추가한다.
+3. 전체 테이블 생성 SQL을 `V1__create_tables.sql`로 작성한다.
+4. 정책 초기 데이터 SQL을 `V2__insert_policy_data.sql`로 작성한다.
+5. `ddl-auto`를 `update`에서 `validate`로 변경한다.
+6. 로컬 `zimpic` DB를 비우고 다시 생성한다.
+7. Spring Boot를 실행해 Flyway가 V1과 V2를 순서대로 실행하는지 확인한다.
+8. `flyway_schema_history`에서 실행 이력을 확인한다.
+9. Spring Boot를 재실행해 이미 적용된 SQL이 중복 실행되지 않는지 확인한다.
+10. 새로 만든 DB에서 전체 사용자 흐름을 다시 테스트한다.
+
+Flyway SQL은 Spring Boot 리소스에 포함한다.
+
+```text
+spring-backend/src/main/resources/db/migration/
+├── V1__create_tables.sql
+└── V2__insert_policy_data.sql
+```
+
+완료 기준: 빈 PostgreSQL에서 Spring Boot를 실행하면 Flyway가 테이블과 정책 데이터를 준비하고, JPA 검증과 전체 API 테스트가 통과한다.
+
+## 7. 서비스별 Dockerfile 작성 및 실행
 
 로컬 기능 검증이 끝난 다음 각 애플리케이션을 이미지로 만든다.
 
@@ -138,7 +173,7 @@ PostgreSQL: jdbc:postgresql://localhost:5432/zimpic
 
 완료 기준: FastAPI, Spring Boot, Nginx 컨테이너가 각각 로컬에서 정상 실행된다.
 
-## 7. Docker Compose 로컬 통합 테스트
+## 8. Docker Compose 로컬 통합 테스트
 
 `compose.yaml`은 여러 컨테이너의 포트, 네트워크, 환경변수, 볼륨과 실행 방법을 한 파일에 정의한다.
 
@@ -171,7 +206,7 @@ PostgreSQL: jdbc:postgresql://postgres:5432/zimpic
 
 완료 기준: Docker Compose 하나로 전체 서비스가 로컬에서 정상 동작하고 데이터가 유지된다.
 
-## 8. AWS EC2 배포
+## 9. AWS EC2 배포
 
 로컬에서 검증한 Docker 구성을 EC2로 옮긴다.
 
@@ -186,4 +221,27 @@ PostgreSQL: jdbc:postgresql://postgres:5432/zimpic
 9. 외부에서 사진 분석부터 견적 결과까지 최종 테스트한다.
 
 완료 기준: EC2 재부팅 이후에도 서비스가 다시 실행되고 데이터가 유지되며, 외부에서는 Nginx를 통해서만 접근할 수 있다.
+
+## 10. 운영 및 DB 변경 관리
+
+최초 배포가 끝난 뒤에는 애플리케이션 코드와 PostgreSQL 스키마의 변경 이력을 함께 관리한다.
+
+### DB 스키마 관리 원칙
+
+- 개발 중에는 `ddl-auto=update`를 사용한다.
+- 최초 배포 준비 단계에서 Flyway를 도입한다.
+- 운영 환경에서는 `ddl-auto=validate`를 사용한다.
+- 운영 이후에는 Entity와 Flyway 마이그레이션 SQL을 함께 변경한다.
+- 운영 DB의 스키마를 임의로 직접 변경하지 않는다.
+- 견적과 사용자 입력 같은 일반 데이터는 API와 JPA를 통해 조회·수정한다.
+
+### 무중단 배포를 위한 DB 변경 원칙
+
+- 구버전과 신버전 애플리케이션이 동시에 사용할 수 있도록 DB 변경의 하위 호환성을 유지한다.
+- 새 컬럼 추가, 애플리케이션 코드 전환, 기존 컬럼 제거를 서로 다른 배포 단계로 나눈다.
+- 기존 컬럼의 삭제나 이름 변경을 신버전 배포와 동시에 처리하지 않는다.
+- 오래 걸리는 DDL과 대량 데이터 변경은 애플리케이션 배포와 분리한다.
+- 모든 서버가 신버전으로 교체된 것을 확인한 뒤 더 이상 사용하지 않는 컬럼과 제약조건을 제거한다.
+
+완료 기준: 운영 DB의 모든 스키마 변경이 Flyway 이력에 기록되고, 배포 중 구버전과 신버전이 동시에 실행되어도 DB 오류가 발생하지 않는다.
 
