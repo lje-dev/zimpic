@@ -5,15 +5,18 @@ public class BusinessException extends RuntimeException {
 
     private final ErrorCode errorCode;
 
+    // 별도 메세지가 없을 경우 기본 메세지 사용
     public BusinessException(ErrorCode errorCode) {
         this(errorCode, errorCode.defaultMessString());
     }
 
+    // 상황에 맞는 메세지를 직접 전달할 때 사용
     public BusinessException(ErrorCode errorCode, String message) {
         super(message);
         this.errorCode = errorCode;
     }
-
+    
+    // GlobalExceptionHandler가 오류 코드를 조회할 때 사용
     public ErrorCode errorCode() {
         return errorCode;
     }
