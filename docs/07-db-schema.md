@@ -5,7 +5,7 @@
 ```
 policy (기준 데이터, 어드민 관리)
   furniture ─┬─< furniture_rotation
-             └─< policy_spcial_item_fee
+             └─< policy_special_item_fee
   policy_box_rule, policy_truck_spec, policy_base_price,
   policy_ladder_fee_rule, policy_stairs_fee_rule, policy_distance_fee_rule
 
@@ -16,7 +16,7 @@ estimates (견적 결과 스냅샷)
   estimate ─┬─< estimate_truck_plan
             ├─< estimate_room ─< estimate_item >─ furniture
             │        └── vision_image
-            └── estimate_price ─< estimate_price_section ─< estimate_price_line
+            └── estimate_price ─< estimate_price_section ─< estimate_price_detail
 ```
 
 > 테이블 구조만 다룬다. 정책 요금표 값은 [04. 견적 산출 정책](04-estimate-policy.md), 가구 데이터 값은 [05. 가구 데이터](05-furniture-data.md) 참고.
@@ -66,7 +66,7 @@ UNIQUE(furniture_id, orientation_code). 코드 의미 → [05. 가구 데이터]
 | policy_ladder_fee_rule | ladder_truck_group, floor_from, floor_to, base_amount | UNIQUE(group, from, to) |
 | policy_stairs_fee_rule | floor_from, floor_to, per_floor_amount | UNIQUE(from, to) |
 | policy_distance_fee_rule | truck_type, base_km, unit_km, per_unit_amount | truck_type UNIQUE |
-| policy_spcial_item_fee | furniture_id, description, unit_amount | furniture_id UNIQUE |
+| policy_special_item_fee | furniture_id, description, unit_amount | furniture_id UNIQUE |
 
 모든 정책 테이블에 `is_active` 있음.
 
@@ -194,7 +194,7 @@ UNIQUE(estimate_id, sort_order)
 | amount | INT | 섹션 합계 |
 | description | VARCHAR(255) NULL | BASE / DISTANCE 설명 |
 
-### estimate_price_line
+### estimate_price_detail
 
 | 컬럼 | 타입 | 설명 |
 | --- | --- | --- |
