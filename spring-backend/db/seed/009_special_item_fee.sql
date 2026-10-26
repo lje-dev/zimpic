@@ -1,0 +1,16 @@
+INSERT INTO policy_special_item_fee (furniture_id, description, unit_amount, is_active)
+SELECT f.id, v.description, v.unit_amount, v.is_active
+FROM (VALUES
+('piano_classic', '피아노 운반 비용', 150000, TRUE),
+('refrigerator_lg', '대형 냉장고 분해/조립 비용', 50000, TRUE),
+('air_conditioner_wall', '에어컨 설치/해체 비용', 80000, TRUE),
+('air_conditioner_stand', '에어컨 설치/해체 비용', 80000, TRUE),
+('treadmill', '러닝머신 추가 비용', 30000, TRUE),
+('strongbox', '금고 추가 비용', 70000, TRUE),
+('fishbowl', '어항 추가 비용', 50000, TRUE),
+('fitness', '헬스기구 추가 비용', 50000, TRUE),
+('bed_stone', '돌침대 분해/재조립 비용', 200000, TRUE),
+('hanger_module', '시스템행거 블록당 분해/재조립 비용', 50000, TRUE)
+) AS v(name_en, description, unit_amount, is_active)
+JOIN furniture f ON f.name_en = v.name_en
+ON CONFLICT (furniture_id) DO NOTHING;
