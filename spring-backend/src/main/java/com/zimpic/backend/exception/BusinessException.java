@@ -7,7 +7,7 @@ public class BusinessException extends RuntimeException {
 
     // 별도 메세지가 없을 경우 기본 메세지 사용
     public BusinessException(ErrorCode errorCode) {
-        this(errorCode, errorCode.defaultMessString());
+        this(errorCode, errorCode.defaultMessage());
     }
 
     // 상황에 맞는 메세지를 직접 전달할 때 사용
