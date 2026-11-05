@@ -7,6 +7,7 @@
 `02-fastapi.md`의 **8.2. 이미지 추론 라우터**는 현재 `Content-Type`과 파일 용량만 검사한다.
 
 - 외부 배포 전 Pillow를 이용한 실제 이미지 검증, 해상도 제한, 요청 횟수 제한 등 보완 추가
+- Spring Boot의 Vision 업로드는 `detail/04-2-vision.md` 5.4의 `ImageFileValidator`로 저장 전 실제 형식·해상도·디코딩을 검사한다. FastAPI도 별도의 진입점이므로 위 검증을 독립적으로 적용한다.
 
 ## 모니터링 서비스(APM, Application Performance Monitoring)
 

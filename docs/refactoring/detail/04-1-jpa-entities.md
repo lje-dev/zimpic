@@ -1,8 +1,8 @@
 # 04-1. JPA Entity 구현
 
-이 문서는 [04. Spring Boot 백엔드 준비 및 단계별 구현](04-spring-boot.md)의 11번을 실제로 입력하기 위한 상세 가이드다. 10번에서 구현한 `Furniture`를 제외하고 정책 8개, 이미지·탐지 2개, 견적 7개로 총 17개 Entity를 작성한다.
+이 문서는 [04. Spring Boot 백엔드 준비 및 단계별 구현](04-spring-boot.md)의 11번을 실제로 입력하기 위한 상세 가이드다. 10번에서 구현한 `Furniture`를 제외하고 정책 8개, 이미지·탐지·실패 로그 3개, 견적 7개로 총 18개 Entity를 작성한다.
 
-기준이 다르면 다음 우선순위를 사용한다.
+기존 Django 테이블의 필드 기준이 다르면 다음 우선순위를 사용한다. `VisionLog`와 24시간·7일 보관용 만료 컬럼은 Spring 전환에서 새로 만드는 구조이므로 이 가이드의 정의를 따른다.
 
 ```text
 docs/07-db-schema.md → 현재 CSV 데이터 → backend/*/models.py
@@ -445,11 +445,11 @@ public class SpecialItemFee {
 }
 ```
 
-## 4. 이미지·탐지 Entity 2개
+## 4. 이미지·탐지·실패 로그 Entity 3개
 
 ### 4.1 VisionImage
 
-Spring Boot에서는 실제 파일 저장과 URL 생성을 Service가 담당하고 Entity에는 저장 경로와 원본 파일명만 보관한다.
+Spring Boot에서는 실제 파일 저장과 URL 생성을 Service가 담당하고 Entity에는 저장 경로, 원본 파일명과 만료 시각을 보관한다. 업로드 성공 시 `expiresAt`은 업로드 시각부터 24시간 뒤로 설정한다. 견적 생성 시 연결된 이미지의 만료 시각을 견적 만료 시각까지 연장하며, 기존 만료 시각보다 앞당기지 않는다.
 
 ```java
 package com.zimpic.backend.entity;
@@ -469,7 +469,8 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(name = "vision_image", indexes = {
     @Index(name = "idx_vision_image_room_type", columnList = "room_type"),
-    @Index(name = "idx_vision_image_created_at", columnList = "created_at")
+    @Index(name = "idx_vision_image_created_at", columnList = "created_at"),
+    @Index(name = "idx_vision_image_expires_at", columnList = "expires_at")
 })
 public class VisionImage {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -484,8 +485,12 @@ public class VisionImage {
     private Integer sortOrder;
     @CreationTimestamp @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+    @Column(name = "expires_at", nullable = false)
+    private Instant expiresAt;
 }
 ```
+
+`createdAt`은 JPA가 생성 시각을 채운다. `expiresAt`은 `@CreationTimestamp`가 아니라 Service가 업로드 성공 시각을 기준으로 명시적으로 채운다. 15번의 생성자는 이 필드를 인자로 받고, 만료를 연장하는 메서드는 현재 값보다 늦은 시각만 반영한다.
 
 ### 4.2 VisionDetection
 
@@ -539,6 +544,58 @@ public class VisionDetection {
 }
 ```
 
+### 4.3 VisionLog
+
+`VisionDetection`은 실제 탐지 결과만 저장한다. 추론 전에 실패하거나 탐지가 하나도 없는 실패는 탐지 행으로 표현할 수 없으므로 실패 이력을 `vision_log`에 별도로 저장한다. 한 요청에 속한 로그는 `requestId`로 묶는다. 저장된 이미지 여러 장이 한 요청의 실패에 영향을 받으면 이미지마다 로그 한 행을 남기고, 이미지 저장 전 실패는 파일 경로가 없는 로그 한 행을 남긴다. 성공 기록은 이 테이블에 만들지 않으므로 `status` 컬럼은 두지 않는다.
+
+```java
+package com.zimpic.backend.entity;
+
+import java.time.Instant;
+import java.util.UUID;
+
+import org.hibernate.annotations.CreationTimestamp;
+
+import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Entity
+@Table(name = "vision_log", indexes = {
+    @Index(name = "idx_vision_log_request_id", columnList = "request_id"),
+    @Index(name = "idx_vision_log_expires_at", columnList = "expires_at")
+})
+public class VisionLog {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @Column(name = "request_id", nullable = false, columnDefinition = "uuid")
+    private UUID requestId;
+    @Column(name = "room_type", length = 30)
+    private String roomType;
+    @Column(name = "file_index")
+    private Integer fileIndex;
+    @Column(name = "failure_stage", nullable = false, length = 30)
+    private String failureStage;
+    @Column(name = "error_code", nullable = false, length = 60)
+    private String errorCode;
+    @Column(name = "exception_type", nullable = false, length = 100)
+    private String exceptionType;
+    @Column(name = "error_message", nullable = false, length = 500)
+    private String errorMessage;
+    @Column(name = "retained_file_path", length = 500)
+    private String retainedFilePath;
+    @CreationTimestamp @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+    @Column(name = "expires_at", nullable = false)
+    private Instant expiresAt;
+}
+```
+
+`retainedFilePath`는 사용자 원본 파일명이나 절대 경로가 아니라 `vision.storage-root` 안의 UUID 파일명이다. 파일을 쓰다 실패해 불완전하거나 요청 검증 중 실패하면 `null`로 둔다. `VisionImage`가 롤백되거나 만들어지지 않아도 로그가 남아야 하므로 필수 외래키로 연결하지 않는다. `errorMessage`에는 길이를 제한한 안전한 요약만 넣고 요청 본문·비밀번호·스택 트레이스는 넣지 않는다. 전체 예외는 같은 `requestId`로 애플리케이션 로그에서 찾는다. 로그와 실패 파일의 만료 시각은 실패 후 7일이다. 저장 폴더는 `/media/vision/**`으로 제공되므로 실패 파일도 URL을 알면 조회할 수 있다는 접근 정책을 전제로 한다.
+
 ## 5. 견적 Entity 7개
 
 ### 5.1 Estimate
@@ -563,7 +620,8 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(name = "estimate", indexes = {
     @Index(name = "idx_estimate_move_type", columnList = "move_type"),
-    @Index(name = "idx_estimate_created_at", columnList = "created_at")
+    @Index(name = "idx_estimate_created_at", columnList = "created_at"),
+    @Index(name = "idx_estimate_expires_at", columnList = "expires_at")
 })
 public class Estimate {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -591,8 +649,12 @@ public class Estimate {
     private Boolean destUseLadder;
     @CreationTimestamp @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+    @Column(name = "expires_at", nullable = false)
+    private Instant expiresAt;
 }
 ```
+
+견적 생성 시 Service가 `expiresAt`을 생성 시각부터 24시간 뒤로 설정한다. 같은 트랜잭션에서 `EstimateRoom`에 연결된 각 `VisionImage.expiresAt`을 견적 만료 시각까지 연장한다. 이미지 하나가 여러 견적에 연결되어도 만료 시각을 앞당기지 않는다.
 
 ### 5.2 EstimateTruckPlan
 
@@ -894,7 +956,7 @@ public class EstimatePriceDetail {
 ```text
 공통 Enum
 → 정책 Entity 8개
-→ 이미지·탐지 Entity 2개
+→ 이미지·탐지·실패 로그 Entity 3개
 → 견적 Entity 7개
 ```
 
@@ -922,13 +984,14 @@ $env:DB_PASSWORD="로컬에서_설정한_비밀번호"
 \d furniture_rotation
 \d policy_truck_spec
 \d vision_detection
+\d vision_log
 \d estimate_item
 \d estimate_price_detail
 ```
 
 완료 기준은 다음과 같다.
 
-- `furniture`를 포함해 총 18개 테이블이 생성된다.
+- `furniture`를 포함해 총 19개 테이블이 생성된다.
 - 모든 외래키 컬럼의 NULL 허용 여부가 `docs/07-db-schema.md`와 일치한다.
 - 정책 테이블의 unique 제약조건과 `is_active` 기본값이 생성된다.
 - `TruckType`이 `T1`, `T2_5` 같은 Java Enum 이름으로 DB에 저장된다.

@@ -18,7 +18,7 @@ Spring Boot
 | 구분         | 선택                        |
 | ------------ | --------------------------- |
 | Java         | Java 21                     |
-| Spring Boot  | 4.1.1                       |
+| Spring Boot  | 4.1.2                       |
 | 빌드 도구    | Gradle Groovy               |
 | 데이터베이스 | PostgreSQL 17               |
 | ORM          | Spring Data JPA와 Hibernate |
@@ -26,9 +26,9 @@ Spring Boot
 | FastAPI 호출 | Spring `RestClient`         |
 | 테스트       | JUnit 5와 Spring Boot Test  |
 
-Spring Initializr에서 선택할 수 있는 정식 안정 버전인 Spring Boot 4.1.1과 Java 21을 사용한다. `SNAPSHOT`은 개발 중인 빌드이고 `M`이 붙은 버전은 마일스톤 시험 버전이므로 선택하지 않는다.
+정식 안정 버전인 Spring Boot 4.1.2와 Java 21을 사용한다. `SNAPSHOT`, `M`, `RC`가 붙은 버전은 개발 또는 시험 단계이므로 선택하지 않는다.
 
-Spring Boot 4.1.1은 Java 17 이상을 요구하며 Java 21을 지원한다. Gradle은 8.14 이상 또는 9.x를 지원하지만, 직접 설치하지 않고 프로젝트와 함께 생성되는 호환 Gradle Wrapper를 사용한다. 자세한 기준은 [Spring Boot 시스템 요구사항](https://docs.spring.io/spring-boot/system-requirements.html)을 참고한다.
+Spring Boot 4.1.2는 Java 17 이상을 요구하며 Java 21을 지원한다. Gradle은 8.14 이상 또는 9.x를 지원하지만, 직접 설치하지 않고 프로젝트와 함께 생성되는 호환 Gradle Wrapper를 사용한다. 자세한 기준은 [Spring Boot 시스템 요구사항](https://docs.spring.io/spring-boot/system-requirements.html)을 참고한다.
 
 Gradle은 시스템에 별도로 설치하지 않고 Spring Initializr가 생성하는 Gradle Wrapper를 사용한다.
 
@@ -86,8 +86,18 @@ SELECT current_database(), current_user;
 
 `yolo/`에서 가상환경을 활성화하고 FastAPI를 실행한다.
 
+macOS와 Linux에서는 다음 명령을 사용한다.
+
 ```bash
 source .venv/bin/activate
+fastapi dev app/main.py
+```
+
+Windows PowerShell에서는 저장소 루트를 기준으로 다음 명령을 사용한다.
+
+```powershell
+cd .\yolo
+.\.venv\Scripts\Activate.ps1
 fastapi dev app/main.py
 ```
 
@@ -95,6 +105,12 @@ fastapi dev app/main.py
 
 ```bash
 curl http://127.0.0.1:8000/health
+```
+
+Windows PowerShell에서는 다음 명령으로 확인한다.
+
+```powershell
+curl.exe http://127.0.0.1:8000/health
 ```
 
 예상 응답은 다음과 같다.
@@ -111,7 +127,7 @@ curl http://127.0.0.1:8000/health
 | ------------ | -------------------- |
 | Project      | Gradle - Groovy      |
 | Language     | Java                 |
-| Spring Boot  | 4.1.1                |
+| Spring Boot  | 4.1.2                |
 | Group        | `com.zimpic`         |
 | Artifact     | `spring-backend`     |
 | Name         | `spring-backend`     |
@@ -131,6 +147,56 @@ curl http://127.0.0.1:8000/health
 | HTTP Client (`RestClient`) | FastAPI와 Kakao API를 호출하는 동기식 HTTP 클라이언트        |
 | OpenAPI·Swagger UI         | Controller와 DTO를 분석해 API 문서를 생성하고 브라우저에서 확인 |
 | Lombok                     | 반복되는 Getter와 생성자 코드 간소화                         |
+
+Spring Initializr에서 Spring Boot `4.1.2`를 선택해 프로젝트를 생성한다. 생성된 `build.gradle`에 Initializr에서 제공하지 않는 OpenAPI 의존성, Jackson 보안 버전과 Mockito Java Agent 설정을 다음과 같이 추가한다. `springdoc-openapi 3.2.0`은 Spring Boot 4.1.x용 버전을 사용한다.
+
+```gradle
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.2'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+// Spring Boot 4.1.2가 기본 관리하는 Jackson 버전보다 이후 공개된
+// CVE-2026-110879 수정 버전을 사용한다.
+ext {
+    set('jackson-2-bom.version', '2.21.8')
+    set('jackson-bom.version', '3.1.8')
+}
+
+configurations {
+    mockitoAgent
+}
+
+dependencies {
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.0'
+    mockitoAgent('org.mockito:mockito-core') {
+        transitive = false
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    jvmArgs += "-javaagent:${configurations.mockitoAgent.asPath}"
+}
+```
+
+`springdoc-openapi`가 직접 취약한 것이 아니라 함께 사용하는 `jackson-databind`의 전이 의존성 버전 때문에 보안 도구가 springdoc 의존성 경로에 경고를 표시할 수 있다. `CVE-2026-110879` 수정 버전은 Jackson 2 계열 `2.21.8`, Jackson 3 계열 `3.1.8`이므로 두 BOM을 함께 맞춘다.
+
+Spring Boot 테스트 의존성이 제공하는 Mockito는 inline mock maker를 사용하며 Byte Buddy Agent가 필요하다. `mockitoAgent` configuration은 Spring Boot가 관리하는 Mockito 버전을 별도로 고정하지 않고 사용하고, `test` task가 테스트 JVM을 시작할 때 `-javaagent`로 미리 등록한다. 이를 통해 Mockito가 실행 중에 Agent를 동적으로 연결할 때 발생하는 self-attaching 및 dynamic agent loading 경고를 방지한다. `transitive = false`는 Agent 실행에 필요한 Mockito JAR만 전달하고 관련 라이브러리를 중복으로 추가하지 않도록 한다.
+
+실제 적용 버전은 의존성 선언만 보고 판단하지 않고 다음 명령으로 확인한다.
+
+```powershell
+.\gradlew.bat dependencyInsight --configuration runtimeClasspath --dependency jackson-databind
+```
+
+결과에 다음 두 버전 이상이 표시되어야 한다.
+
+```text
+com.fasterxml.jackson.core:jackson-databind:2.21.8
+tools.jackson.core:jackson-databind:3.1.8
+```
 
 처음에는 Spring Security, WebFlux와 Flyway를 추가하지 않는다.
 
@@ -380,7 +446,7 @@ curl http://127.0.0.1:8080/v3/api-docs
 
 ```text
 com.zimpic.backend
-├── config                         # Actuator, HTTP Client, CORS 등 애플리케이션 설정
+├── config                         # CORS처럼 여러 기능에서 공통으로 사용하는 애플리케이션 설정
 ├── controller                     # HTTP 요청을 받고 응답 반환
 ├── dto
 │   ├── request                    # React와 외부에서 받는 요청 형식
@@ -403,7 +469,9 @@ com.zimpic.backend
 │   │   └── PriceLocation.java     # enum: 비용이 발생한 출발지 또는 도착지
 ├── repository                     # 데이터 저장과 조회
 ├── service                        # 비즈니스 로직과 트랜잭션
-├── client                         # FastAPI와 Kakao API 호출
+├── client                         # 외부 API별 호출 코드, 전용 설정과 DTO
+│   ├── yolo                       # FastAPI·YOLO 호출
+│   └── kakao                      # Kakao API 호출
 └── exception                      # 공통 예외와 API 오류 응답 처리
     ├── ErrorCode.java             # enum: 오류별 HTTP 상태, 코드와 기본 메시지
     ├── BusinessException.java     # class: RuntimeException을 상속하는 업무 예외
@@ -605,10 +673,17 @@ package com.zimpic.backend.exception;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
-    // 요청과 데이터 조회 오류
+    // 요청 형식과 Spring MVC 요청 처리 오류
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청값을 확인해 주세요."),
+    RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다."),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 HTTP 메서드입니다."),
+
+    // 업무 처리와 데이터 조회 오류
     FURNITURE_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 가구 정보를 찾을 수 없습니다."),
     BUSINESS_RULE_VIOLATION(HttpStatus.UNPROCESSABLE_CONTENT, "처리할 수 없는 요청입니다."),
+
+    // 업로드된 파일을 서버가 읽지 못한 내부 파일 처리 오류
+    FILE_READ_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "업로드 파일을 읽는 중 오류가 발생했습니다."),
 
     // FastAPI와 Kakao API 같은 외부 서비스 호출 오류
     EXTERNAL_API_BAD_RESPONSE(HttpStatus.BAD_GATEWAY, "외부 서비스 응답을 처리할 수 없습니다."),
@@ -663,6 +738,12 @@ public class BusinessException extends RuntimeException {
         this.errorCode = errorCode;
     }
 
+    // 외부 API 또는 파일 처리 중 발생한 원래 예외를 원인(cause)으로 보존한다.
+    public BusinessException(ErrorCode errorCode, Throwable cause) {
+        super(errorCode.defaultMessage(), cause);
+        this.errorCode = errorCode;
+    }
+
     // GlobalExceptionHandler가 오류 코드를 조회할 때 사용한다.
     public ErrorCode errorCode() {
         return errorCode;
@@ -670,7 +751,7 @@ public class BusinessException extends RuntimeException {
 }
 ```
 
-첫 번째 생성자는 `ErrorCode`의 기본 메시지를 사용한다. `this(...)`는 같은 클래스의 다른 생성자를 호출하는 문법이다. 두 번째 생성자는 상황에 맞는 메시지를 직접 전달할 때 사용하며, `super(message)`로 부모인 `RuntimeException`에 메시지를 저장한다.
+첫 번째 생성자는 `ErrorCode`의 기본 메시지를 사용한다. `this(...)`는 같은 클래스의 다른 생성자를 호출하는 문법이다. 두 번째 생성자는 상황에 맞는 메시지를 직접 전달할 때 사용하며, `super(message)`로 부모인 `RuntimeException`에 메시지를 저장한다. 세 번째 생성자는 외부 API나 파일 처리 중 발생한 원래 예외를 `cause`로 보존한다. 클라이언트에는 공통 메시지를 반환하더라도 테스트 결과와 서버 로그에서는 실제 원인을 확인할 수 있다.
 
 다음 코드는 `ErrorResponse.java`나 `BusinessException.java` 안에 작성하는 코드가 아니라, 이후 Service에서 예외를 발생시킬 때의 사용 예시다. 별도 메시지를 전달하지 않으면 `ErrorCode`의 기본 메시지를 사용한다.
 
@@ -691,21 +772,42 @@ throw new BusinessException(
 
 `GlobalExceptionHandler`는 Controller 처리 중 발생한 예외를 한곳에서 받아 HTTP 상태와 `ErrorResponse`로 변환한다. `@RestControllerAdvice`를 사용하면 모든 REST Controller에 공통으로 적용된다.
 
+아래 Handler를 작성하기 전에 앞의 `ErrorCode` enum에 다음 두 오류 코드가 추가되어 있어야 한다. 이 값은 Spring에서 제공하는 상수가 아니라 이 프로젝트에서 직접 정의하는 API 오류 코드다.
+
+```java
+RESOURCE_NOT_FOUND(
+    HttpStatus.NOT_FOUND,
+    "요청한 리소스를 찾을 수 없습니다."
+),
+METHOD_NOT_ALLOWED(
+    HttpStatus.METHOD_NOT_ALLOWED,
+    "지원하지 않는 HTTP 메서드입니다."
+),
+```
+
+`NoResourceFoundException`은 Spring이 발생시키는 예외 클래스이고, `ErrorCode.RESOURCE_NOT_FOUND`는 그 예외를 JSON 응답으로 변환할 때 사용하는 프로젝트 자체 오류 코드다.
+
 ```java
 package com.zimpic.backend.exception;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.zimpic.backend.dto.response.ErrorResponse;
 
 // 모든 REST Controller에서 발생한 예외를 공통으로 처리한다.
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    // 예상하지 못한 예외의 상세 내용은 서버 로그에 기록한다.
+    // 마지막 500 Handler에서 실제 원인을 서버 로그에 기록할 때 사용한다.
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     // Service 등에서 의도적으로 발생시킨 업무 예외를 처리한다.
@@ -721,7 +823,65 @@ public class GlobalExceptionHandler {
             .body(response);
     }
 
-    // 별도로 처리하지 않은 모든 예외를 공통 500 응답으로 변환한다.
+    // DTO Validation 실패, 잘못된 JSON, 필수 파라미터 누락과 타입 불일치를
+    // 하나의 잘못된 요청(400) 범주로 묶어 처리한다.
+    @ExceptionHandler({
+        MethodArgumentNotValidException.class,
+        HttpMessageNotReadableException.class,
+        MissingServletRequestParameterException.class,
+        MethodArgumentTypeMismatchException.class
+    })
+    public ResponseEntity<ErrorResponse> handleInvalidRequest(
+        Exception exception
+    ) {
+        ErrorCode errorCode = ErrorCode.INVALID_REQUEST;
+        ErrorResponse response = ErrorResponse.of(
+            errorCode,
+            errorCode.defaultMessage()
+        );
+
+        return ResponseEntity
+            .status(errorCode.httpStatus())
+            .body(response);
+    }
+
+    // Controller 주소와 정적 파일이 모두 없으면 404로 처리한다.
+    // 브라우저가 자동 요청하는 /favicon.ico나 Chrome의 /.well-known/... 요청도
+    // 서버 내부 오류가 아니라 이 Handler에서 정상적인 404 응답으로 처리된다.
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFound(
+        NoResourceFoundException exception
+    ) {
+        ErrorCode errorCode = ErrorCode.RESOURCE_NOT_FOUND;
+        ErrorResponse response = ErrorResponse.of(
+            errorCode,
+            errorCode.defaultMessage()
+        );
+
+        return ResponseEntity
+            .status(errorCode.httpStatus())
+            .body(response);
+    }
+
+    // 존재하는 주소에 지원하지 않는 GET, POST 등을 요청하면 405로 처리한다.
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotAllowed(
+        HttpRequestMethodNotSupportedException exception
+    ) {
+        ErrorCode errorCode = ErrorCode.METHOD_NOT_ALLOWED;
+        ErrorResponse response = ErrorResponse.of(
+            errorCode,
+            errorCode.defaultMessage()
+        );
+
+        return ResponseEntity
+            .status(errorCode.httpStatus())
+            .body(response);
+    }
+
+    // 위의 예상 가능한 범주에 속하지 않은 예외만 공통 500 응답으로 변환한다.
+    // 새로운 예외가 생길 때마다 Handler를 만드는 것이 아니라, HTTP 상태와
+    // 사용자 응답을 별도로 구분해야 하는 대표 범주가 생길 때만 추가한다.
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpectedException(
         Exception exception
@@ -742,7 +902,11 @@ public class GlobalExceptionHandler {
 }
 ```
 
-`BusinessException`은 정해진 오류 코드와 사용자 메시지를 그대로 응답에 사용한다. 그 밖의 예상하지 못한 예외는 전체 내용을 서버 로그에 기록하되, 응답에는 예외 클래스명이나 원문을 넣지 않고 공통 `500` 메시지만 반환한다. 요청 DTO의 Validation 오류를 `400`으로 변환하는 처리는 실제 요청 DTO를 구현할 때 추가한다.
+`BusinessException`은 정해진 오류 코드와 사용자 메시지를 그대로 응답에 사용한다. Spring MVC에서 발생하는 요청 형식 오류, 없는 주소와 지원하지 않는 HTTP 메서드는 각각 `400`, `404`, `405`로 분류한다. 이처럼 예상 가능한 클라이언트 요청 오류는 서버 장애가 아니므로 `ERROR` 스택 트레이스를 남기지 않는다.
+
+브라우저로 API 주소를 열면 브라우저가 `/favicon.ico`를 추가 요청할 수 있고, Chrome 개발자 도구가 `/.well-known/appspecific/com.chrome.devtools.json`을 요청할 수도 있다. 프로젝트에 해당 정적 파일이 없으면 `NoResourceFoundException`이 발생하지만 Furniture API 실패가 아니다. `handleResourceNotFound()`가 이를 `404`로 처리하므로 마지막 `500` Handler에 전달되지 않는다.
+
+모든 Spring 예외를 하나씩 등록할 필요는 없다. 기존 범주와 같은 의미의 예외는 같은 Handler에 묶고, 클라이언트에게 다른 HTTP 상태나 메시지를 반환해야 하는 대표 범주가 생길 때만 Handler를 추가한다. 마지막 `Exception.class` Handler는 분류되지 않은 실제 내부 오류를 위한 안전망이다. 내부 오류는 전체 내용을 서버 로그에 기록하되, 사용자 응답에는 예외 클래스명이나 원문을 넣지 않고 공통 `500` 메시지만 반환한다.
 
 기본 HTTP 상태 기준은 다음과 같다.
 
@@ -751,7 +915,8 @@ public class GlobalExceptionHandler {
 | `200 OK` | 정상 조회와 계산 |
 | `201 Created` | 견적 등 데이터 생성 성공 |
 | `400 Bad Request` | 요청 형식 또는 입력값 검증 실패 |
-| `404 Not Found` | 가구나 견적 데이터가 없음 |
+| `404 Not Found` | 가구·견적 데이터 또는 요청한 URL·정적 리소스가 없음 |
+| `405 Method Not Allowed` | 존재하는 URL에 지원하지 않는 HTTP 메서드를 요청 |
 | `409 Conflict` | 중복 데이터 등 현재 상태와 요청이 충돌 |
 | `422 Unprocessable Content` | 요청 형식은 맞지만 업무 규칙상 처리할 수 없음 |
 | `502 Bad Gateway` | FastAPI 또는 Kakao API가 잘못된 응답을 반환 |
@@ -760,7 +925,7 @@ public class GlobalExceptionHandler {
 
 예상하지 못한 내부 예외의 클래스명, DB 오류와 외부 API 원문은 로그에만 기록하고 사용자 응답에는 노출하지 않는다.
 
-공통 응답 형식은 기존 Django API 응답을 감싸는 새로운 계약이다. Django와 계산 결과를 비교할 때는 `data` 내부 값을 비교하고, React를 Spring Boot에 연결하는 단계에서 `response.data`를 읽도록 API 서비스 코드를 함께 변경한다.
+공통 응답 형식은 기존 Django API 응답을 감싸는 새로운 계약이다. 정책 조회, Vision과 견적처럼 Spring Boot Controller가 제공하는 모든 정상 비즈니스 응답은 `ApiResponse<T>`를 사용한다. Actuator `/health`, Swagger와 Spring Boot가 호출하는 FastAPI 응답은 이 애플리케이션의 비즈니스 API가 아니므로 감싸지 않는다. Django와 계산 결과를 비교할 때는 `data` 내부 값을 비교하고, React를 Spring Boot에 연결하는 단계에서 공통 응답의 `data`를 읽도록 API 서비스 코드를 함께 변경한다.
 
 ### 공통 응답과 오류 처리 최소 테스트
 
@@ -1398,10 +1563,11 @@ Entity 연관관계는 실제로 필요한 방향만 만들고 모든 관계를 
 \dt
 \d furniture
 \d vision_image
+\d vision_log
 \d estimate
 ```
 
-전체 Entity 구현이 끝나면 정책 9개, 이미지·탐지 2개, 견적 7개로 총 18개 테이블이 생성되어야 한다. Django 모델의 `db_table` 이름을 유지해 기존 구조와 비교하기 쉽게 한다.
+전체 Entity 구현이 끝나면 정책 9개, 이미지·탐지·실패 로그 3개, 견적 7개로 총 19개 테이블이 생성되어야 한다. 기존 테이블은 Django 모델의 `db_table` 이름을 유지하고, 실패 이력용 `vision_log`를 추가한다.
 
 ## 12. 개발용 정책 기준 데이터 적재
 
@@ -1543,31 +1709,34 @@ GET /api/policy/furniture/
 
 이 API는 요청 본문과 외부 API 호출이 없는 단순한 GET 요청이다. 따라서 Vision과 견적처럼 복잡한 기능을 옮기기 전에 `Repository → DTO → Service → Controller → JSON 응답`의 기본 흐름과 PostgreSQL 연결을 테스트하기 적합하다.
 
-기존 주소와 응답 필드명을 유지해 React 연결을 바로 변경하지 않아도 되도록 한다. 이 단계에서 정책 조회 API를 완성하면 이후 Vision과 견적 API도 같은 계층 구조를 기준으로 구현한다.
+기존 주소와 실제 데이터 필드명은 유지하되, Spring Boot의 모든 정상 비즈니스 응답은 9번에서 만든 `ApiResponse<T>`로 감싼다. 이 단계에서 정책 조회 API를 완성하면 이후 Vision과 견적 API도 같은 계층 구조와 공통 응답 형식을 기준으로 구현한다.
 
 ### 기존 Django 응답 확인
 
 기존 `FurnitureSerializer`는 `yolo_id`, `padding_cm`, `stackable`, `can_stack_on_top`을 응답에서 제외한다. `FurnitureRotation`도 현재 Serializer에 포함되지 않으므로 이 API 응답에는 회전 정보가 없다. Spring Boot도 우선 현재 응답과 동일한 필드만 반환한다.
 
 ```json
-[
-  {
-    "id": 1,
-    "category": "GENERAL_APPLIANCE",
-    "nameEn": "tv_base",
-    "nameKr": "TV(일반)",
-    "description": "일반적인 모니터와 TV를 기준으로 계산했어요.",
-    "referenceModel": "LG PC 모니터 80cm",
-    "referenceUrl": "https://example.com/product",
-    "widthCm": 73,
-    "depthCm": 5,
-    "heightCm": 43,
-    "needsDisassembly": false
-  }
-]
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "category": "GENERAL_APPLIANCE",
+      "nameEn": "tv_base",
+      "nameKr": "TV(일반)",
+      "description": "일반적인 모니터와 TV를 기준으로 계산했어요.",
+      "referenceModel": "LG PC 모니터 80cm",
+      "referenceUrl": "https://example.com/product",
+      "widthCm": 73,
+      "depthCm": 5,
+      "heightCm": 43,
+      "needsDisassembly": false
+    }
+  ]
+}
 ```
 
-목록은 `id` 오름차순으로 정렬하고 `ETC` 카테고리는 제외한다. nullable 컬럼인 설명, 기준 제품과 URL은 값이 없으면 JSON `null`로 반환한다. 기존 API 호환을 위해 이 API에는 `ApiResponse` 공통 래퍼를 적용하지 않고 배열을 바로 반환한다.
+목록은 `id` 오름차순으로 정렬하고 `ETC` 카테고리는 제외한다. nullable 컬럼인 설명, 기준 제품과 URL은 값이 없으면 JSON `null`로 반환한다. 실제 목록은 `data`에 들어가고 `success`는 `true`다.
 
 ### FurnitureRepository 조회 추가
 
@@ -1616,8 +1785,10 @@ import com.zimpic.backend.entity.Furniture;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.ToString;
 
 @Getter
+@ToString
 @AllArgsConstructor
 public class FurnitureResponse {
     private final Long id;
@@ -1650,7 +1821,7 @@ public class FurnitureResponse {
 }
 ```
 
-`@Getter`는 각 필드의 조회 메서드를 만들고, `@AllArgsConstructor`는 모든 필드를 받는 생성자를 만든다. 응답 DTO는 생성 후 값을 변경할 필요가 없으므로 필드를 `final`로 선언하고 `@Setter`는 사용하지 않는다. 별도의 Jackson 이름 설정이 없으면 `nameEn`, `widthCm`, `needsDisassembly`와 같은 Java 필드명이 JSON에도 그대로 사용된다.
+`@Getter`는 각 필드의 조회 메서드를 만들고, `@AllArgsConstructor`는 모든 필드를 받는 생성자를 만든다. `@ToString`은 DTO를 로그에 출력할 때 객체 식별값 대신 각 필드의 이름과 값을 보여주는 `toString()` 메서드를 만든다. 응답 DTO는 생성 후 값을 변경할 필요가 없으므로 필드를 `final`로 선언하고 `@Setter`는 사용하지 않는다. 별도의 Jackson 이름 설정이 없으면 `nameEn`, `widthCm`, `needsDisassembly`와 같은 Java 필드명이 JSON에도 그대로 사용된다.
 
 기존 프론트에서 Django 응답의 `name_en`, `width_cm`, `needs_disassembly`와 같은 `snake_case` 필드를 참조하고 있다면, Spring Boot API로 전환할 때 각각 `nameEn`, `widthCm`, `needsDisassembly`와 같은 `camelCase`로 수정해야 한다. 이후 작성하는 요청·응답 DTO도 특별한 외부 API 규격이 없는 한 `@JsonProperty` 없이 `camelCase`를 사용한다.
 
@@ -1709,15 +1880,20 @@ package com.zimpic.backend.controller;
 
 import java.util.List;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.zimpic.backend.dto.response.ApiResponse;
 import com.zimpic.backend.dto.response.FurnitureResponse;
 import com.zimpic.backend.service.FurnitureService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/policy/furniture")
 @RequiredArgsConstructor
@@ -1725,13 +1901,38 @@ public class FurnitureController {
     private final FurnitureService furnitureService;
 
     @GetMapping
-    public List<FurnitureResponse> findAll() {
-        return furnitureService.findAll();
+    public ApiResponse<List<FurnitureResponse>> findAll(
+        HttpServletRequest request
+    ) {
+        log.info(
+            "request: method={}, uri={}",
+            request.getMethod(),
+            request.getRequestURI()
+        );
+
+        List<FurnitureResponse> response = furnitureService.findAll();
+
+        log.info(
+            "response: size={} furniture={}",
+            response.size(),
+            response
+        );
+
+        return ApiResponse.success(response);
     }
 }
 ```
 
-`@GetMapping`은 `@RequestMapping`에 지정한 `/api/policy/furniture`의 GET 요청을 이 메서드에 연결한다. Django와 달리 이 가이드에서는 끝에 `/`를 붙이지 않는 주소를 기준으로 사용한다.
+`@GetMapping`은 `@RequestMapping`에 지정한 `/api/policy/furniture`의 GET 요청을 이 메서드에 연결한다. Django와 달리 이 가이드에서는 끝에 `/`를 붙이지 않는 주소를 기준으로 사용한다. Service가 반환한 목록은 Controller에서 `ApiResponse.success(response)`로 감싸며 Service와 Repository는 HTTP 공통 응답 형식에 의존하지 않는다.
+
+`HttpServletRequest`는 현재 요청의 HTTP 메서드와 URI를 확인하기 위해 Spring MVC가 전달한다. `@Slf4j`는 `log.info()`를 사용할 수 있는 SLF4J Logger를 자동으로 만들고, `{}`에는 뒤에 전달한 값이 순서대로 들어간다. 첫 번째 로그는 요청 메서드와 주소를, 두 번째 로그는 응답 개수와 `FurnitureResponse` 목록을 출력한다. `INFO`는 기본 로그 레벨에서도 표시되므로 별도의 `DEBUG` 설정 없이 확인할 수 있다.
+
+```text
+request: method=GET, uri=/api/policy/furniture
+response: size=40 furniture=[FurnitureResponse(id=1, ...), ...]
+```
+
+현재는 로컬에서 응답 객체를 학습하고 확인하기 위해 전체 목록을 `INFO`로 기록한다. 이후 운영 환경에서 로그가 너무 길어지면 개수만 `INFO`로 남기고 전체 목록은 `DEBUG`로 낮춘다.
 
 ### 브라우저에서 Furniture API 확인
 
@@ -1761,8 +1962,9 @@ curl.exe -i http://127.0.0.1:8080/api/policy/furniture
 PowerShell 객체 형태로 응답을 확인하려면 다음 명령을 사용한다.
 
 ```powershell
-$furnitureList = Invoke-RestMethod http://127.0.0.1:8080/api/policy/furniture
-$furnitureList | Select-Object -First 3 | Format-List
+$response = Invoke-RestMethod http://127.0.0.1:8080/api/policy/furniture
+$response.success
+$response.data | Select-Object -First 3 | Format-List
 ```
 
 Swagger UI에서도 확인할 수 있다.
@@ -1774,7 +1976,7 @@ http://127.0.0.1:8080/swagger-ui.html
 완료 기준은 다음과 같다.
 
 - HTTP 상태가 `200 OK`다.
-- 최상위 JSON이 배열이다.
+- 최상위 JSON의 `success`가 `true`이고 `data`가 배열이다.
 - `ETC` 카테고리의 이사 박스는 목록에서 제외된다.
 - 목록이 `id` 오름차순으로 정렬된다.
 - JSON 필드명이 `nameEn`, `widthCm`, `needsDisassembly`와 같은 `camelCase`다.
@@ -1785,30 +1987,348 @@ http://127.0.0.1:8080/swagger-ui.html
 
 ### 선행 작업: FastAPI 연결 확인
 
-추론 API를 구현하기 전에 Spring Boot에서 FastAPI로 기본 HTTP 요청을 보낼 수 있는지 Health API로 먼저 확인한다. Spring Boot에서 FastAPI를 호출할 때는 Spring `RestClient`를 사용한다.
+추론 API를 구현하기 전에 [2번 사전 준비의 FastAPI 실행 및 Health 확인](#fastapi)을 먼저 진행한다. FastAPI가 `8000` 포트에서 정상 실행되는 것을 확인한 뒤, Spring Boot에서 FastAPI로 기본 HTTP 요청을 보낼 수 있는지 Health API로 확인한다. Spring Boot에서 FastAPI를 호출할 때는 Spring `RestClient`를 사용한다.
 
-호출 대상은 다음과 같다.
+이 단계에서 작성할 파일은 다음과 같다.
+
+```text
+src/main/java/com/zimpic/backend/
+└── client/yolo/
+    ├── YoloClientConfig.java
+    ├── YoloClient.java
+    └── dto/
+        ├── FastApiHealthResponse.java
+        ├── InferenceResponse.java
+        ├── DetectionResponse.java
+        └── BoundingBoxResponse.java
+
+src/test/java/com/zimpic/backend/client/yolo/
+└── YoloClientIntegrationTest.java
+```
+
+호출 흐름은 다음과 같다.
+
+```text
+Spring Service
+  → YoloClient
+  → RestClient
+  → FastAPI :8000
+```
+
+Controller나 Service에서 FastAPI URL과 HTTP 처리 코드를 반복하지 않고 `YoloClient`가 외부 통신을 전담한다.
+
+외부 API 코드는 서비스별로 묶는다. `YoloClientConfig`는 FastAPI 호출에만 사용하는 설정이므로 공통 `config`가 아니라 `client/yolo`에 `YoloClient`와 함께 둔다. 설정과 클라이언트는 역할이 다르므로 하나의 클래스로 합치지 않고 각각 별도 파일로 유지한다.
+
+```text
+client/
+├── yolo/
+│   ├── YoloClientConfig.java
+│   ├── YoloClient.java
+│   └── dto/
+└── kakao/                         # 견적 거리 조회를 구현할 때 추가
+    ├── KakaoClientConfig.java
+    ├── KakaoClient.java
+    └── dto/
+```
+
+- 특정 외부 서비스에서만 사용하는 설정과 DTO: 해당 `client/{서비스}` 패키지에 배치
+- CORS처럼 여러 기능에 공통으로 적용되는 설정: 최상위 `config` 패키지에 배치
+- 설정 클래스가 하나뿐인 현재는 `client/yolo/config`처럼 하위 패키지를 한 단계 더 만들지 않음
+
+### RestClient 의존성 확인
+
+`build.gradle`에 `starter-restclient`가 이미 있으므로 새로 추가하지 않는다. 파일 multipart 요청에 사용하는 `MultipartBodyBuilder`는 내부에서 Reactive Streams의 `Publisher` 타입을 참조하므로 `reactive-streams`도 추가한다.
+
+```gradle
+implementation 'org.springframework.boot:spring-boot-starter-restclient'
+implementation 'org.reactivestreams:reactive-streams'
+```
+
+Reactive Streams는 JavaScript 프론트엔드 라이브러리인 React와 관계없다. JVM에서 비동기 데이터 흐름을 표현하는 `Publisher`, `Subscriber` 등의 인터페이스를 제공하는 작은 API 라이브러리다. 이 의존성이 없으면 `MultipartBodyBuilder`를 실행할 때 `NoClassDefFoundError: org/reactivestreams/Publisher`가 발생할 수 있다. 이 의존성을 추가한다고 Spring MVC가 WebFlux로 변경되는 것은 아니다.
+
+### FastAPI 주소와 타임아웃 설정
+
+`application.properties`의 기존 `yolo.base-url` 아래에 연결 및 응답 타임아웃을 추가한다.
+
+```properties
+# FastAPI 주소와 RestClient timeout
+yolo.base-url=${YOLO_BASE_URL:http://localhost:8000}
+yolo.connect-timeout=${YOLO_CONNECT_TIMEOUT:3s}
+yolo.read-timeout=${YOLO_READ_TIMEOUT:60s}
+```
+
+- `connect-timeout`: FastAPI 서버와 TCP 연결을 맺을 때까지 기다리는 최대 시간
+- `read-timeout`: 연결 후 YOLO 추론 응답을 기다리는 최대 시간
+- `${환경변수:기본값}` 형식이므로 로컬에서는 기본값을 사용하고 배포 환경에서는 환경변수로 변경할 수 있음
+
+YOLO 추론은 일반 API보다 오래 걸릴 수 있으므로 연결 시간보다 응답 대기 시간을 길게 둔다. 실제 모델 처리 시간을 확인한 뒤 운영 값은 다시 조정한다.
+
+### YoloClientConfig 작성
+
+다음 파일을 만든다.
+
+```text
+src/main/java/com/zimpic/backend/client/yolo/YoloClientConfig.java
+```
+
+```java
+package com.zimpic.backend.client.yolo;
+
+import java.time.Duration;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.http.client.HttpClientSettings;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
+
+// FastAPI 호출에 사용할 HTTP 클라이언트 객체를 생성하는 Spring 설정 클래스
+@Configuration
+public class YoloClientConfig {
+
+    // 애플리케이션 시작 시 RestClient 객체를 하나 생성해 Spring Bean으로 등록한다.
+    @Bean
+    public RestClient yoloRestClient(
+        // starter-restclient가 자동으로 제공하는 RestClient 생성용 Builder
+        RestClient.Builder builder,
+        // application.properties의 yolo 설정값을 주입받는다.
+        @Value("${yolo.base-url}") String baseUrl,
+        @Value("${yolo.connect-timeout}") Duration connectTimeout,
+        @Value("${yolo.read-timeout}") Duration readTimeout
+    ) {
+        // FastAPI 연결과 추론 응답을 기다릴 최대 시간을 설정한다.
+        HttpClientSettings settings = HttpClientSettings
+            .defaults()
+            .withTimeouts(connectTimeout, readTimeout);
+
+        // FastAPI/Uvicorn과 안정적으로 통신하도록 HTTP/1.1 기반의 단순 요청 구현체를 사용한다.
+        ClientHttpRequestFactory requestFactory =
+            ClientHttpRequestFactoryBuilder
+                .simple()
+                .build(settings);
+
+        // FastAPI 기본 주소와 요청 설정을 적용한 RestClient를 생성해 반환한다.
+        return builder
+            .baseUrl(baseUrl)
+            .requestFactory(requestFactory)
+            .build();
+    }
+}
+```
+
+`@Configuration`은 이 클래스를 Spring 설정으로 등록하고, `@Bean`은 설정된 `RestClient` 객체를 Spring이 관리하게 한다. 이후 `YoloClient`는 생성자를 통해 이 객체를 주입받는다. `baseUrl`을 지정했으므로 호출할 때는 `http://localhost:8000`을 반복하지 않고 `/health`, `/inferences`만 작성한다.
+
+`ClientHttpRequestFactoryBuilder.simple()`은 HTTP/1.1 기반 요청 구현체를 사용하고 `HttpClientSettings`의 연결 및 응답 타임아웃을 적용한다. 자동 선택인 `detect()`를 사용하면 개발 환경에 따라 JDK HTTP 클라이언트가 선택되어 Uvicorn 로그에 `Unsupported upgrade request`, `Invalid HTTP request received`가 출력되거나 multipart 요청이 `422`로 실패할 수 있으므로 FastAPI 연동에서는 `simple()`을 명시한다.
+
+### Health 응답 DTO 작성
+
+FastAPI Health 응답은 다음과 같다.
 
 ```text
 GET http://localhost:8000/health
 ```
 
-FastAPI 주소는 코드에 직접 작성하지 않고 `yolo.base-url` 설정에서 가져온다.
+```json
+{
+  "status": "ok"
+}
+```
 
-다음 상황을 구분해 처리한다.
+다음 파일을 만든다.
 
-- 연결 실패
-- 연결 타임아웃
-- 응답 타임아웃
-- 4xx 응답
-- 5xx 응답
-- JSON 변환 실패
+```text
+src/main/java/com/zimpic/backend/client/yolo/dto/FastApiHealthResponse.java
+```
 
-FastAPI의 내부 예외나 응답 전체를 사용자에게 그대로 노출하지 않는다. Health 호출이 성공하면 같은 기본 주소와 `RestClient` 설정을 사용해 추론 API 호출을 구현한다.
+```java
+package com.zimpic.backend.client.yolo.dto;
 
-### 추론 API 구현
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 
-호출 형식은 다음과 같다.
+@Getter
+@Setter
+@ToString
+@NoArgsConstructor
+public class FastApiHealthResponse {
+    // FastAPI의 {"status":"ok"}에서 status 값을 받는다.
+    private String status;
+}
+```
+
+이 DTO는 Spring이 FastAPI JSON을 Java 객체로 역직렬화할 때 사용한다. 외부 응답을 받아 필드에 값을 넣어야 하므로 인자가 없는 생성자와 setter를 제공한다. Entity가 아니므로 JPA용 `PROTECTED` 생성자를 사용할 필요는 없다.
+
+### YoloClient의 Health 호출 작성
+
+다음 파일을 만든다.
+
+```text
+src/main/java/com/zimpic/backend/client/yolo/YoloClient.java
+```
+
+```java
+package com.zimpic.backend.client.yolo;
+
+import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
+
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+
+import com.zimpic.backend.client.yolo.dto.FastApiHealthResponse;
+import com.zimpic.backend.exception.BusinessException;
+import com.zimpic.backend.exception.ErrorCode;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.ToString;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+// Spring Boot가 FastAPI에 요청할 때 사용하는 HTTP 클라이언트 컴포넌트
+@Component
+@RequiredArgsConstructor
+public class YoloClient {
+    // YoloClientConfig에서 Bean으로 만든 RestClient를 생성자 주입받는다.
+    private final RestClient yoloRestClient;
+
+    public FastApiHealthResponse health() {
+        try {
+            // 이 요청에서는 Spring Boot가 서버가 아니라 FastAPI를 호출하는 클라이언트다.
+            FastApiHealthResponse response = yoloRestClient
+                // GET http://localhost:8000/health 요청을 만든다.
+                .get()
+                .uri("/health")
+                // 요청을 실행하고 HTTP 오류 응답을 예외로 변환한다.
+                .retrieve()
+                // FastAPI JSON 응답을 FastApiHealthResponse 객체로 변환한다.
+                .body(FastApiHealthResponse.class);
+
+            // 본문이 없거나 약속한 status 값이 아니면 정상 응답으로 처리하지 않는다.
+            if (response == null || !"ok".equals(response.getStatus())) {
+                throw new BusinessException(
+                    ErrorCode.EXTERNAL_API_BAD_RESPONSE
+                );
+            }
+
+            log.info("FastAPI health 응답: {}", response);
+            return response;
+        } catch (ResourceAccessException exception) {
+            // 연결 실패와 timeout처럼 HTTP 응답을 받기 전 발생한 오류를 변환한다.
+            throw convertConnectionException(exception);
+        } catch (RestClientException exception) {
+            // FastAPI의 4xx·5xx 또는 JSON 변환 실패를 공통 외부 API 오류로 변환한다.
+            throw new BusinessException(
+                ErrorCode.EXTERNAL_API_BAD_RESPONSE
+            );
+        }
+    }
+
+    private BusinessException convertConnectionException(
+        ResourceAccessException exception
+    ) {
+        // 예외 원인 중 timeout이 있으면 504 오류로 구분한다.
+        if (hasTimeoutCause(exception)) {
+            return new BusinessException(ErrorCode.EXTERNAL_API_TIMEOUT);
+        }
+
+        // FastAPI 미실행, 포트 오류와 연결 거부 등은 502 오류로 변환한다.
+        return new BusinessException(ErrorCode.EXTERNAL_API_BAD_RESPONSE);
+    }
+
+    private boolean hasTimeoutCause(Throwable throwable) {
+        Throwable cause = throwable;
+
+        // 예외가 다른 예외에 감싸져 있을 수 있으므로 원인 체인을 끝까지 확인한다.
+        while (cause != null) {
+            if (cause instanceof SocketTimeoutException
+                || cause instanceof HttpTimeoutException) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+
+        return false;
+    }
+}
+```
+
+`retrieve().body(FastApiHealthResponse.class)`는 GET 요청을 보내고 JSON 응답을 DTO로 변환한다. 응답 본문이 없거나 `status`가 `ok`가 아니면 정상적인 FastAPI 응답으로 보지 않는다.
+
+외부 통신 오류는 다음처럼 변환한다.
+
+| 상황 | 프로젝트 오류 | HTTP 상태 |
+| --- | --- | --- |
+| 연결 또는 응답 시간 초과 | `EXTERNAL_API_TIMEOUT` | `504 Gateway Timeout` |
+| 연결 거부, 4xx·5xx, JSON 변환 실패, 잘못된 응답 | `EXTERNAL_API_BAD_RESPONSE` | `502 Bad Gateway` |
+
+FastAPI의 내부 오류 본문이나 Java 예외 원문을 사용자 응답에 그대로 노출하지 않는다. 상세 원인이 필요하면 서버 로그에 남기고 사용자는 프로젝트의 공통 오류 응답만 받게 한다.
+
+### 실제 FastAPI Health 연동 테스트
+
+이 테스트는 가짜 응답이 아니라 `8000` 포트에서 실행 중인 실제 FastAPI를 호출한다. 먼저 [2번 사전 준비의 FastAPI 실행 및 Health 확인](#fastapi)을 완료한다.
+
+다음 파일을 만든다.
+
+```text
+src/test/java/com/zimpic/backend/client/yolo/YoloClientIntegrationTest.java
+```
+
+```java
+package com.zimpic.backend.client.yolo;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import com.zimpic.backend.client.yolo.dto.FastApiHealthResponse;
+
+@SpringBootTest
+class YoloClientIntegrationTest {
+
+    // 실제 설정과 함께 생성된 YoloClient Bean을 테스트에 주입한다.
+    @Autowired
+    private YoloClient yoloClient;
+
+    @Test
+    void callsFastApiHealth() {
+        // 8000 포트에서 실행 중인 실제 FastAPI의 /health를 호출한다.
+        FastApiHealthResponse response = yoloClient.health();
+
+        // 응답 객체가 존재하고 FastAPI가 약속한 상태값인지 검증한다.
+        assertNotNull(response);
+        assertEquals("ok", response.getStatus());
+    }
+}
+```
+
+FastAPI와 PostgreSQL을 실행한 상태에서 Spring Backend 디렉터리에서 테스트한다.
+
+```powershell
+.\gradlew.bat test --tests "com.zimpic.backend.client.yolo.YoloClientIntegrationTest"
+```
+
+정상이라면 테스트가 통과하고 Spring 로그에 다음 형태가 표시된다.
+
+```text
+FastAPI health 응답: FastApiHealthResponse(status=ok)
+```
+
+FastAPI를 종료하고 같은 테스트를 실행하면 `EXTERNAL_API_BAD_RESPONSE` 예외로 실패해야 한다. 연결이 된 상태에서 제한 시간을 넘긴 경우에는 `EXTERNAL_API_TIMEOUT`으로 변환된다.
+
+### 추론 응답 DTO 작성
+
+Health 호출이 성공하면 같은 `RestClient`로 추론 API를 호출한다. 호출 형식은 다음과 같다.
 
 ```text
 POST http://localhost:8000/inferences
@@ -1837,46 +2357,424 @@ Content-Type: multipart/form-data
 }
 ```
 
-응답 DTO는 다음 역할로 분리한다.
+FastAPI는 Python 규칙에 따라 `snake_case`를 사용한다. 우리 Spring API 응답은 `camelCase`를 사용하지만, 이 DTO는 외부 FastAPI 계약을 받는 용도이므로 이름이 다른 필드에만 `@JsonProperty`를 사용한다.
 
-- `InferenceResponse`
-- `DetectionResponse`
-- `BoundingBoxResponse`
+`BoundingBoxResponse.java`를 작성한다.
 
-FastAPI의 `snake_case` JSON과 Java의 `camelCase` 필드가 정확하게 매핑되는지 테스트한다.
+```java
+package com.zimpic.backend.client.yolo.dto;
 
-다음 실패 상황도 확인한다.
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 
-- FastAPI가 실행되지 않음
-- 연결 또는 추론 시간 초과
-- 지원하지 않는 이미지 형식
-- 10MB를 초과한 이미지
-- FastAPI 추론 실패
-- 잘못된 JSON 응답
+@Getter
+@Setter
+@ToString
+@NoArgsConstructor
+public class BoundingBoxResponse {
+    // FastAPI가 0~1 범위로 반환한 탐지 영역의 중심 좌표와 크기
+    private double x;
+    private double y;
+    private double width;
+    private double height;
+}
+```
+
+`DetectionResponse.java`를 작성한다.
+
+```java
+package com.zimpic.backend.client.yolo.dto;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
+
+@Getter
+@Setter
+@ToString
+@NoArgsConstructor
+public class DetectionResponse {
+    // FastAPI의 snake_case JSON 이름을 Java camelCase 필드에 연결한다.
+    @JsonProperty("class_id")
+    private int classId;
+
+    @JsonProperty("class_name")
+    private String className;
+
+    // 탐지 신뢰도와 위치 정보
+    private double confidence;
+    private BoundingBoxResponse bbox;
+}
+```
+
+`InferenceResponse.java`를 작성한다.
+
+```java
+package com.zimpic.backend.client.yolo.dto;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
+
+@Getter
+@Setter
+@ToString
+@NoArgsConstructor
+public class InferenceResponse {
+    // 외부 FastAPI 응답 계약이 snake_case이므로 이 필드에만 이름을 지정한다.
+    @JsonProperty("model_version")
+    private String modelVersion;
+
+    // 이미지에서 탐지한 결과 목록이며 탐지 결과가 없으면 빈 배열을 받는다.
+    private List<DetectionResponse> detections;
+}
+```
+
+### YoloClient의 추론 호출 추가
+
+`YoloClient.java`에 다음 import를 추가한다.
+
+```java
+import org.springframework.http.MediaType;
+import org.springframework.http.client.MultipartBodyBuilder;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.zimpic.backend.client.yolo.dto.InferenceResponse;
+import java.io.IOException;
+```
+
+`YoloClient` 클래스 안에 다음 메서드를 추가한다.
+
+```java
+public InferenceResponse inference(MultipartFile file) {
+    // 원본 파일명이 없으면 Content-Type에 맞는 전송용 파일명을 만든다.
+    // 파일 내용과 형식의 유효성 검사는 15번 Vision Service에서 먼저 처리한다.
+    String filename = resolveFilename(file);
+
+    // 파일 Content-Type이 없으면 일반 바이너리 형식으로 전달한다.
+    MediaType fileContentType = file.getContentType() == null
+        ? MediaType.APPLICATION_OCTET_STREAM
+        : MediaType.parseMediaType(file.getContentType());
+
+    // FastAPI의 UploadFile 매개변수 이름인 file로 multipart 본문을 만든다.
+    try {
+        MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
+        bodyBuilder
+            .part("file", file.getBytes())
+            .filename(filename)
+            .contentType(fileContentType);
+
+        log.info(
+            "request: FastAPI inference, filename={}, contentType={}, size={}",
+            filename,
+            file.getContentType(),
+            file.getSize()
+        );
+
+        // POST http://localhost:8000/inferences 요청을 전송한다.
+        InferenceResponse response = yoloRestClient
+            .post()
+            .uri("/inferences")
+            // 요청 본문이 일반 JSON이 아니라 파일을 포함한 multipart임을 지정한다.
+            .contentType(MediaType.MULTIPART_FORM_DATA)
+            .body(bodyBuilder.build())
+            .retrieve()
+            // FastAPI JSON 응답을 InferenceResponse 객체로 변환한다.
+            .body(InferenceResponse.class);
+
+        // 응답 본문과 필수 목록이 없으면 FastAPI 계약에 맞지 않는 응답이다.
+        if (response == null || response.getDetections() == null) {
+            throw new BusinessException(
+                ErrorCode.EXTERNAL_API_BAD_RESPONSE
+            );
+        }
+
+        log.info(
+            "FastAPI 추론 완료: modelVersion={}, detections={}",
+            response.getModelVersion(),
+            response.getDetections().size()
+        );
+
+        log.debug("FastAPI 추론 응답: {}", response);
+        return response;
+    } catch (ResourceAccessException exception) {
+        // 연결 실패와 timeout을 프로젝트 공통 오류로 변환한다.
+        throw convertConnectionException(exception);
+    } catch (IOException exception) {
+        // 업로드 파일의 바이트를 읽지 못한 경우 원래 예외를 보존한다.
+        throw new BusinessException(
+            ErrorCode.FILE_READ_FAILED,
+            exception
+        );
+    } catch (RestClientException exception) {
+        // 4xx·5xx와 JSON 변환 실패를 공통 외부 API 오류로 변환한다.
+        throw new BusinessException(
+            ErrorCode.EXTERNAL_API_BAD_RESPONSE,
+            exception
+        );
+    }
+}
+
+// 검증된 이미지에 원본 파일명이 없을 때 multipart 전송에 사용할 이름을 결정한다.
+// 파일을 변환하거나 저장하는 메서드가 아니라 요청에 붙일 이름만 반환한다.
+private String resolveFilename(MultipartFile file) {
+    String originalFilename = file.getOriginalFilename();
+
+    if (originalFilename != null && !originalFilename.isBlank()) {
+        return originalFilename;
+    }
+
+    String contentType = file.getContentType();
+
+    // Content-Type이 없는 파일은 15번 검증에서 거부하지만,
+    // 이 메서드 자체에서도 NullPointerException이 발생하지 않도록 처리한다.
+    if (contentType == null) {
+        return "upload";
+    }
+
+    String filename;
+
+    switch (contentType) {
+        case "image/png":
+            filename = "upload.png";
+            break;
+        case "image/webp":
+            filename = "upload.webp";
+            break;
+        case "image/jpeg":
+            filename = "upload.jpg";
+            break;
+        default:
+            // 지원하지 않는 형식은 15번 검증에서 YoloClient 호출 전에 거부한다.
+            filename = "upload";
+            break;
+    }
+
+    return filename;
+}
+```
+
+`MultipartBodyBuilder`는 FastAPI가 요구하는 `multipart/form-data` 요청을 만들고, `part("file", ...)`의 `file`은 FastAPI의 `UploadFile` 매개변수 이름과 정확히 일치해야 한다. `file.getBytes()`는 실제 파일 내용을 multipart 파트에 넣으며, 파일을 읽지 못하면 `IOException`이 발생하므로 `FILE_READ_FAILED`로 변환한다. FastAPI의 HTTP 오류 등은 `EXTERNAL_API_BAD_RESPONSE`로 변환하되 원래 예외를 `cause`로 보존한다.
+
+`resolveFilename()`은 원본 파일명이 있으면 그대로 사용하고, 없으면 `Content-Type`에 맞춰 `upload.jpg`, `upload.png`, `upload.webp` 중 하나를 선택한다. 실제 파일을 해당 형식으로 변환하거나 Spring 서버에 저장하는 코드는 아니다. 로그에는 실제 전송에 사용한 `filename`, Content-Type과 바이트 크기만 기록하며 파일 내용은 기록하지 않는다.
+
+Spring이 클라이언트로부터 받은 이미지의 형식과 10MB 제한은 15번 Vision API에서 FastAPI를 호출하기 전에 먼저 검증한다. FastAPI의 `415`, `413`, `422` 응답은 Spring의 사전 검증을 통과한 뒤 발생한 예상 밖 외부 응답이므로 `EXTERNAL_API_BAD_RESPONSE`로 변환한다.
+
+### 실제 이미지 추론 연동 테스트
+
+Health 테스트는 Spring Boot가 FastAPI에 연결할 수 있는지만 확인한다. 이번 테스트는 실제 이미지 파일을 `MockMultipartFile`로 만들어 `YoloClient.inference()`에 전달하고 다음 전체 흐름을 확인한다.
+
+```text
+JUnit 테스트
+→ YoloClient.inference()
+→ RestClient multipart 요청
+→ FastAPI POST /inferences
+→ YOLO 모델 추론
+→ JSON 응답
+→ InferenceResponse 변환
+```
+
+`MockMultipartFile`의 `Mock`은 FastAPI 응답을 가짜로 만든다는 뜻이 아니다. 테스트 코드에서 브라우저 업로드와 같은 `MultipartFile` 객체를 만들기 위한 클래스이며, `YoloClient`는 실제 `8000` 포트의 FastAPI에 요청한다.
+
+#### 테스트 이미지 준비
+
+다음 디렉터리를 만들고 실제 가구가 포함된 JPEG 이미지 한 장을 넣는다.
+
+```text
+spring-backend/
+└── src/test/resources/images/
+    └── inference-test.jpg
+```
+
+파일명이 다르면 아래 테스트의 리소스 경로와 파일명도 동일하게 바꾼다. 테스트 이미지는 YOLO 탐지 결과를 확인하기 쉬운 방 또는 가구 사진을 사용한다. 개인정보가 포함된 이미지는 저장소에 커밋하지 않는다.
+
+PNG 파일을 사용할 경우 세 값을 함께 변경한다.
+
+```java
+new ClassPathResource("images/inference-test.png");
+"inference-test.png",
+MediaType.IMAGE_PNG_VALUE,
+```
+
+#### 추론 테스트 import 추가
+
+기존 `YoloClientIntegrationTest.java`에 다음 import를 추가한다.
+
+```java
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
+
+import com.zimpic.backend.client.yolo.dto.InferenceResponse;
+```
+
+`MockMultipartFile`은 Spring 테스트 의존성에 포함되어 있으므로 Gradle 의존성을 추가할 필요가 없다.
+
+#### 추론 테스트 메서드 추가
+
+기존 `YoloClientIntegrationTest` 클래스 안에 다음 메서드를 추가한다.
+
+```java
+@Test
+void uploadsImageToFastApiInference() throws Exception {
+    // src/test/resources는 테스트 실행 시 classpath의 루트가 된다.
+    ClassPathResource imageResource =
+        new ClassPathResource("images/inference-test.jpg");
+
+    // 테스트 이미지를 Spring Controller가 받는 MultipartFile 형태로 만든다.
+    MockMultipartFile imageFile = new MockMultipartFile(
+        "file",                         // multipart 필드명
+        "inference-test.jpg",           // FastAPI에 전달할 파일명
+        MediaType.IMAGE_JPEG_VALUE,      // Content-Type: image/jpeg
+        imageResource.getInputStream()   // 실제 테스트 이미지 바이트
+    );
+
+    // 실제 FastAPI의 POST /inferences에 이미지를 보내고 응답을 받는다.
+    InferenceResponse response = yoloClient.inference(imageFile);
+
+    // JSON 응답이 Java DTO로 정상 변환됐는지 확인한다.
+    assertNotNull(response);
+    assertNotNull(response.getModelVersion());
+    assertNotNull(response.getDetections());
+}
+```
+
+`throws Exception`은 테스트 리소스의 입력 스트림을 여는 과정에서 발생할 수 있는 검사 예외를 테스트 메서드 밖으로 전달한다.
+
+탐지 결과가 빈 목록이어도 정상일 수 있다. YOLO가 해당 이미지에서 학습된 가구를 찾지 못할 수 있으므로 다음 검증은 사용하지 않는다.
+
+```java
+// 탐지 결과가 반드시 한 개 이상이라고 보장할 수 없으므로 사용하지 않는다.
+assertFalse(response.getDetections().isEmpty());
+```
+
+대신 `detections`가 `null`이 아니고 빈 배열도 정상적으로 변환되는지만 확인한다.
+
+#### 테스트 실행 준비
+
+첫 번째 PowerShell에서 FastAPI를 실행하고 모델 로딩이 끝날 때까지 기다린다.
+
+```powershell
+cd .\yolo
+.\.venv\Scripts\Activate.ps1
+fastapi dev app/main.py
+```
+
+다른 PowerShell에서 FastAPI Health를 먼저 확인한다.
+
+```powershell
+curl.exe http://127.0.0.1:8000/health
+```
+
+정상 응답:
+
+```json
+{"status":"ok"}
+```
+
+PostgreSQL도 실행한 뒤 `spring-backend`에서 추론 테스트 메서드만 실행한다.
+
+```powershell
+cd .\spring-backend
+.\gradlew.bat test --tests "com.zimpic.backend.client.yolo.YoloClientIntegrationTest.uploadsImageToFastApiInference"
+```
+
+Health와 추론 테스트를 모두 실행하려면 클래스 이름까지만 지정한다.
+
+```powershell
+.\gradlew.bat test --tests "com.zimpic.backend.client.yolo.YoloClientIntegrationTest"
+```
+
+정상적으로 완료되면 Gradle에는 다음 결과가 표시된다. FastAPI 로그의 `200`만 확인하지 말고 테스트 명령 자체가 `BUILD SUCCESSFUL`로 끝났는지도 함께 확인한다.
+
+```text
+BUILD SUCCESSFUL
+```
+
+Spring 로그에서는 전송한 파일 정보와 FastAPI 응답을 확인할 수 있다.
+
+```text
+request: FastAPI inference, filename=inference-test.jpg, contentType=image/jpeg, size=123456
+response FastAPI inference: modelVersion=best_260204, detections=[...]
+```
+
+FastAPI 로그에서도 실제 요청과 추론 수행을 확인한다.
+
+```text
+추론 요청 수신: content_type=image/jpeg
+YOLO 추론 시작
+YOLO 추론 완료: detections=3
+127.0.0.1:... - "POST /inferences HTTP/1.1" 200 OK
+```
+
+위 세 가지가 모두 확인되어야 Spring에서 보낸 이미지가 FastAPI에 도착하고, YOLO 추론 응답이 다시 Spring DTO로 변환된 전체 연동이 성공한 것이다. 별도로 실행한 `curl` 요청의 `200`은 FastAPI 자체가 정상이라는 의미일 뿐 Spring 통합 테스트 성공을 의미하지 않는다.
+
+#### 테스트 실패 확인 기준
+
+| 증상 | 확인할 내용 |
+| --- | --- |
+| 테스트 이미지를 찾지 못함 | `src/test/resources/images/inference-test.jpg` 경로와 파일명 확인 |
+| `EXTERNAL_API_BAD_RESPONSE` | FastAPI 실행 여부, `8000` 포트, FastAPI 콘솔의 4xx·5xx 확인 |
+| `422`와 `body.file Field required` | `part("file", ...)` 이름과 multipart 본문을 확인하고 `YoloClientConfig`가 `ClientHttpRequestFactoryBuilder.simple()`을 사용하는지 확인 |
+| `Unsupported upgrade request`, `Invalid HTTP request received` | 요청 팩토리가 `detect()`가 아닌 HTTP/1.1 기반 `simple()`인지 확인 |
+| `FILE_READ_FAILED` | 테스트 이미지 경로와 읽기 권한, `file.getBytes()`의 원본 `cause` 확인 |
+| `EXTERNAL_API_TIMEOUT` | YOLO 모델 로딩 완료 여부와 `yolo.read-timeout` 확인 |
+| `415 Unsupported Media Type` | 파일 확장자와 `MediaType`이 JPEG·PNG·WEBP 중 하나인지 확인 |
+| `413 Request Entity Too Large` | 이미지가 10MB 이하인지 확인 |
+| 응답 JSON 변환 실패 | `@JsonProperty`와 FastAPI 실제 응답 필드명 비교 |
+
+이 테스트는 실제 FastAPI와 YOLO 모델에 의존하는 통합 테스트다. FastAPI 없이 언제든 실행할 수 있는 가짜 응답 기반 테스트는 이후 테스트 구성을 분리할 때 추가한다.
+
+### 컴파일 확인
+
+FastAPI 실행 여부와 관계없이 먼저 Java 코드가 컴파일되는지 확인한다.
+
+```powershell
+.\gradlew.bat clean compileJava
+```
+
+그다음 FastAPI를 실행하고 Health 연동 테스트를 수행한다. 실제 이미지 파일을 받아 `inference()`를 호출하는 흐름은 15번 Vision 기능에서 Controller와 파일 검증을 구현하며 연결한다.
+
+완료 기준은 다음과 같다.
+
+- FastAPI가 `http://127.0.0.1:8000/health`에서 `{"status":"ok"}`를 반환한다.
+- `YoloClientConfig`가 기본 주소와 두 타임아웃을 적용하고 HTTP/1.1 기반 `simple()` 요청 팩토리를 사용하는 `RestClient`를 생성한다.
+- `YoloClientIntegrationTest`가 실제 FastAPI Health 호출에 성공한다.
+- FastAPI가 꺼졌거나 타임아웃이 발생했을 때 프로젝트 공통 외부 API 오류로 변환된다.
+- 추론 응답의 `model_version`, `class_id`, `class_name`이 Java의 camelCase 필드로 변환된다.
+- `YoloClient.inference()`가 `file` 이름의 multipart 요청을 보내도록 작성되어 있다.
+- 테스트 이미지를 사용한 실제 추론 통합 테스트가 성공하고 FastAPI 로그의 `POST /inferences ... 200`과 Gradle의 `BUILD SUCCESSFUL`을 모두 확인한다.
 
 ## 15. Vision 기능 이전
 
-FastAPI 연결이 확인되면 기존 `/api/vision/` 흐름을 옮긴다.
+> **파일별 작성 순서와 완성 코드는 [상세가이드 4-2. Vision 기능 이전](04-2-vision.md)를 따른다.** 이 절은 전체 흐름만 요약한다.
+
+14번에서 Spring Boot가 FastAPI의 Health와 추론 API를 직접 호출하는 것까지 확인했다. 이번 단계에서는 React가 보내는 여러 방의 이미지를 Spring Boot가 받아 검증하고, 파일 저장과 YOLO 추론을 수행한 뒤 탐지 결과를 PostgreSQL에 저장한다.
+
+기존 React 요청과 연결할 수 있도록 Django API의 주소, multipart 필드명과 `snake_case` 결과 필드를 유지한다. 공통 `ApiResponse.data`를 읽는 프론트 변경은 4-2에서 안내한다.
 
 ```text
-React 이미지 업로드
-→ Spring Boot 파일 검증
-→ 이미지 저장
-→ FastAPI로 이미지 전달
-→ 탐지 결과 수신
+React POST /api/vision/
+→ multipart 요청 전체 검증
+→ 이미지 파일 저장
+→ 저장한 이미지별 FastAPI 추론
 → class_id로 Furniture 조회
-→ VisionImage 저장
-→ VisionDetection 저장
-→ React 응답 반환
+→ 짧은 DB 트랜잭션에서 VisionImage와 VisionDetection 저장
+→ VisionImage 만료 시각을 업로드 시각에서 24시간 뒤로 설정
+→ ApiResponse로 감싼 201 Created 응답
 ```
 
-FastAPI 호출과 같이 오래 걸릴 수 있는 외부 요청 동안 DB 트랜잭션을 불필요하게 유지하지 않도록 처리 단계를 분리한다.
-
-기존 React와 호환되도록 다음 주소와 응답 형식을 유지한다.
-
-```text
-POST /api/vision/
-```
+FastAPI 호출은 수 초 이상 걸릴 수 있으므로 DB 트랜잭션 안에서 실행하지 않는다. 모든 파일 저장과 추론이 성공한 다음 DB 저장 전용 Service를 호출한다. 중간에 실패하면 성공 결과 DB 작업은 롤백한다. 완전히 저장된 이미지는 이동하지 않고, 별도 트랜잭션으로 `VisionLog`에 실패 단계·원인·UUID 파일명을 7일간 기록한다. 파일 쓰기 중 생긴 불완전한 파일은 삭제한다. 같은 저장 폴더를 공개 URL로 제공하므로 실패 파일도 URL을 알면 조회할 수 있다. 자세한 흐름은 [상세가이드 4-2](04-2-vision.md)를 따른다.
 
 ## 16. 견적 기능 이전
 
@@ -1896,17 +2794,46 @@ POST /api/vision/
 12. 사다리차 요금 계산
 13. 특수가구 요금 계산
 14. 최종 금액과 세부 항목 저장
-15. 기존 응답 형식으로 반환
+15. 견적 결과를 `ApiResponse<EstimateResponse>`로 감싸 반환
+
+견적 생성 시 `Estimate.expiresAt`을 생성 시각부터 24시간 뒤로 설정한다. `EstimateRoom`에 연결된 성공 `VisionImage`도 같은 시각까지 만료를 연장한다. 이미지 하나가 여러 견적에 쓰이면 기존 만료 시각보다 늦은 경우에만 갱신한다. 견적 생성 실패 시 이 변경은 견적 저장 트랜잭션과 함께 롤백된다. 이전 버튼만 누르는 브라우저 동작은 서버에 전달되지 않으므로 만료 시각을 바꾸지 않는다. 다시 견적을 생성하면 그 요청 시각을 기준으로 새 견적과 연결 이미지의 만료를 정한다.
 
 계산 기능은 Controller가 아니라 각각의 Service에서 구현한다.
 
 기능 하나를 옮길 때마다 동일한 입력을 Django와 Spring Boot에 전달해 결과를 비교한다. 금액, CBM과 추천 차량 등이 다르면 다음 기능으로 넘어가기 전에 원인을 확인한다.
 
-기존 React와 호환되도록 다음 주소와 응답 형식을 유지한다.
+기존 API 주소와 견적 결과 DTO의 필드는 유지하고, 정상 응답은 공통 응답으로 감싼다.
 
 ```text
 POST /api/estimates/
 ```
+
+```json
+{
+  "success": true,
+  "data": {
+    "estimate_id": 65,
+    "summary": {},
+    "rooms": [],
+    "pricing": {}
+  }
+}
+```
+
+견적 Service는 `EstimateResponse`만 반환하고 Controller가 `ApiResponse.success(response)`를 적용한다. 생성 성공 상태인 `201 Created`는 공통 응답 적용 전과 동일하게 유지한다.
+
+### 만료 데이터 정리
+
+회원 없이 한 번 사용하는 견적이므로 성공한 견적·이미지는 24시간, 실패 로그·완전히 저장된 실패 이미지는 7일 보관한다. 모든 이미지 파일은 `vision.storage-root` 한 폴더에 둔다. 견적을 만들지 않고 이탈한 성공 이미지도 업로드 시 설정한 만료 시각에 정리한다. 별도 Spring Batch 애플리케이션 대신 Spring Boot에 `@EnableScheduling`을 설정하고 `@Scheduled` 정리 작업을 매시간 실행한다. 만료 시각은 `Instant`로 저장하고, 스케줄러가 시작된 시각보다 이전인 행을 소량씩 조회해 처리한다. 실제 삭제는 만료 후 최대 한 주기 늦을 수 있다.
+
+정리 순서는 다음과 같다.
+
+1. 만료된 견적의 자식 행(`estimate_item`, 가격 상세·구간·가격, 트럭 계획, 방)을 외래키 의존관계의 역순으로 삭제하고 견적을 삭제한다. 삭제 전 그 방들이 참조한 `VisionImage` ID를 모은다.
+2. 만료된 `VisionImage` 중 **아직 만료되지 않은 견적이 참조하지 않는** 행을 정리한다. 파일은 `vision.storage-root` 안의 UUID 파일명만 허용해 `deleteIfExists`로 먼저 삭제한다. 파일 삭제에 실패하면 해당 DB 행을 남겨 다음 실행에서 재시도한다. 파일 삭제 후에는 `VisionDetection`과 `VisionImage`를 삭제한다. DB 삭제에 실패해도 다음 실행에서 파일 삭제를 다시 시도할 수 있어야 한다.
+3. 만료된 `VisionLog`의 파일을 같은 `vision.storage-root`에서 삭제한 뒤 로그 행을 삭제한다. 파일이 없는 로그는 행만 삭제한다. 파일이 아직 `VisionImage`에 연결되어 있으면 그 행의 만료 규칙을 우선하며 삭제하지 않는다.
+4. DB에 기록되기 전에 프로세스가 중단되어 남은 파일은 UUID 파일명·파일 수정 시각을 확인한다. `VisionImage`나 `VisionLog` 어디에도 연결되지 않은 파일은 7일이 지난 뒤 삭제한다. 경로는 `vision.storage-root` 아래로만 제한하고, 원본 파일명이나 외부 입력 경로를 그대로 사용하지 않는다.
+
+파일시스템과 DB 삭제를 하나의 트랜잭션으로 묶을 수 없다. 따라서 정리 작업은 재실행해도 같은 결과가 나도록 만들고, 실패한 대상은 로그에 남겨 다음 주기에 재시도한다. 두 Spring 인스턴스를 동시에 운영한다면 같은 정리 작업이 중복 실행되지 않도록 DB 잠금 또는 단일 작업 실행자를 정한다. `EstimateRoom.imageUrl`은 이미지 만료 후 유효하지 않으므로 견적과 이미지는 같은 보관 기간으로 관리한다.
 
 ## 17. 테스트
 
@@ -1933,6 +2860,11 @@ DB나 외부 API 없이 계산 로직을 검증한다.
 - 요청값 검증
 - 잘못된 요청
 - Service 예외 변환
+
+### 실패 이력과 만료 정리 테스트
+
+- Vision 실패 시 `VisionLog`의 원인 코드와 같은 폴더의 완성 이미지 보관
+- 만료된 견적·이미지·실패 로그 정리와 파일 삭제 실패 후 재시도
 
 ### FastAPI Client 테스트
 
@@ -1992,16 +2924,18 @@ DB나 외부 API 없이 계산 로직을 검증한다.
 - 이미지 저장
 - 탐지 결과 매핑과 저장
 - `/api/vision/` 호환
+- 실패 원인 `VisionLog` 기록과 실패 이미지 7일 보관
 
 ### 체크포인트 7. 견적 이전
 
 - 계산 로직 단위별 이전
 - `/api/estimates/` 호환
 - Django 결과 비교
+- 견적·연결 이미지 만료 시각 연장과 정기 삭제
 
 ## 19. 완료 기준
 
-- Java 21과 Spring Boot 4.1.1로 실행된다.
+- Java 21과 Spring Boot 4.1.2로 실행된다.
 - PostgreSQL의 `zimpic` DB를 사용한다.
 - 정책 테이블과 초기 데이터가 생성된다.
 - `/health`가 애플리케이션과 DB 상태를 반영한다.
