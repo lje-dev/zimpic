@@ -3,9 +3,11 @@ package com.zimpic.backend.dto.response;
 import com.zimpic.backend.entity.Furniture;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.ToString;
 
 @Getter
 @AllArgsConstructor
+@ToString
 public class FurnitureResponse {
   private final Long id;
   private final String category;

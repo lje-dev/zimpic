@@ -17,7 +17,8 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(name = "estimate", indexes = {
     @Index(name = "idx_estimate_move_type", columnList = "move_type"),
-    @Index(name = "idx_estimate_created_at", columnList = "created_at")
+    @Index(name = "idx_estimate_created_at", columnList = "created_at"),
+    @Index(name = "idx_estimate_expires_at", columnList = "expires_at")
 })
 public class Estimate {
   @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -50,4 +51,6 @@ public class Estimate {
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
+  @Column(name = "expires_at", nullable = false)
+  private Instant expiresAt;
 }

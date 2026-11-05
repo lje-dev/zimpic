@@ -21,5 +21,4 @@ public class FurnitureService {
         .stream().map(FurnitureResponse::entityToDto).toList();
   }
 
-
 }

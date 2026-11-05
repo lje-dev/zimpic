@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.zimpic.backend.dto.response.ErrorResponse;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 // 모든 REST Controller에서 발생한 예외를 공통으로 처리
@@ -31,7 +32,6 @@ public class GlobalExceptionHandler {
             errorCode, 
             exception.getMessage()
         );
-
         return ResponseEntity.
             status(errorCode.httpStatus())
             .body(response);
@@ -51,7 +51,6 @@ public class GlobalExceptionHandler {
             errorCode,
             errorCode.defaultMessage()
         );
-
         return ResponseEntity
             .status(errorCode.httpStatus())
             .body(response);
@@ -65,7 +64,6 @@ public class GlobalExceptionHandler {
             errorCode,
             errorCode.defaultMessage()
         );
-
         return ResponseEntity
             .status(errorCode.httpStatus())
             .body(response);
@@ -73,13 +71,28 @@ public class GlobalExceptionHandler {
 
     // 405
     // 지원하지 않는 GET, POST 등 요청
-    public ResponseEntity<ErrorResponse> handMethodNotAllowed(HttpRequestMethodNotSupportedException exception) {
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotAllowed(HttpRequestMethodNotSupportedException exception) {
         ErrorCode errorCode = ErrorCode.METHOD_NOT_ALLOWED;
         ErrorResponse response = ErrorResponse.of(
             errorCode,
             errorCode.defaultMessage()
         );
+        return ResponseEntity
+            .status(errorCode.httpStatus())
+            .body(response);
+    }
 
+    // 413
+    // 업로드 크기 제한 오류
+    // Spring multipart 파서가 service보다 먼저 던지는 예외라 따로 처리해줌
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException exception) {
+        ErrorCode errorCode = ErrorCode.IMAGE_FILE_TOO_LARGE;
+        ErrorResponse response = ErrorResponse.of(
+            errorCode,
+            errorCode.defaultMessage()
+        );
         return ResponseEntity
             .status(errorCode.httpStatus())
             .body(response);
@@ -96,7 +109,6 @@ public class GlobalExceptionHandler {
             errorCode, 
             errorCode.defaultMessage()
         );
-        
         return ResponseEntity
             .status(errorCode.httpStatus())
             .body(response);

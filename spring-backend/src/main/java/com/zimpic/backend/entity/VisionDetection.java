@@ -50,4 +50,24 @@ public class VisionDetection {
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
+
+  public VisionDetection(
+      VisionImage visionImage,
+      Integer yoloId,
+      String yoloClass,
+      Furniture furniture,
+      BigDecimal confidence,
+      BigDecimal bboxX, BigDecimal bboxY,
+      BigDecimal bboxW, BigDecimal bboxH
+  ) {
+    this.visionImage = visionImage;
+    this.yoloId = yoloId;
+    this.yoloClass = yoloClass;
+    this.furniture = furniture;
+    this.confidence = confidence;
+    this.bboxX = bboxX;
+    this.bboxY = bboxY;
+    this.bboxW = bboxW;
+    this.bboxH = bboxH;
+  }
 }

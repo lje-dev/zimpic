@@ -15,9 +15,11 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(
     name = "vision_image",
-    indexes = {@Index(name = "idx_vision_image_room_type", columnList = "room_type"),
-      @Index(name = "idx_vision_image_created_at", columnList = "created_at")}
-)
+    indexes = {
+        @Index(name = "idx_vision_image_room_type", columnList = "room_type"),
+        @Index(name = "idx_vision_image_created_at", columnList = "created_at"),
+        @Index(name = "idx_vision_image_expires_at", columnList = "expires_at")
+})
 public class VisionImage {
 
   @Id
@@ -42,4 +44,23 @@ public class VisionImage {
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
+
+  @Column(name = "expires_at", nullable = false)
+  private Instant expiresAt;
+
+  public VisionImage(String roomType, String image, String imageFileName, Integer sortOrder, Instant expiresAt) {
+    this.roomType = roomType;
+    this.image = image;
+    this.imageFileName = imageFileName;
+    this.sortOrder = sortOrder;
+    this.expiresAt = expiresAt;
+  }
+
+  // 견적 만료 시각이 현재 이미지 만료 시각보다 늦으면
+  // 보관 기간을 연장하기 위한 메서드
+  public void extendExpiry(Instant candidate) {
+    if(candidate.isAfter(this.expiresAt)) {
+      this.expiresAt = candidate;
+    }
+  }
 }

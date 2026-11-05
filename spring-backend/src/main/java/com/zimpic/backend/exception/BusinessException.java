@@ -15,6 +15,12 @@ public class BusinessException extends RuntimeException {
         super(message);
         this.errorCode = errorCode;
     }
+
+    // 원본 예외를 보존하며 에러 메세지를 전달
+    public BusinessException(ErrorCode errorCode, Throwable cause) {
+        super(errorCode.defaultMessage(), cause);
+        this.errorCode = errorCode;
+    }
     
     // GlobalExceptionHandler가 오류 코드를 조회할 때 사용
     public ErrorCode errorCode() {
