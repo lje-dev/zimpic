@@ -31,7 +31,7 @@ public class VisionController {
   public ApiResponse<VisionUploadResponse> upload(
       @Parameter(
           description = "방 목록을 JSON 배열 문자열로 입력",
-          example = "[{\"room_type\":\"LIVING\",\"file_index\":0,\"sort_order\":1}]"
+          example = "[{\"room_type\":\"LIVING\",\"file_index\":0}]"
       )
       @RequestPart("rooms") String rooms,
       @RequestPart("files") List<MultipartFile> files,

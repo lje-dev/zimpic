@@ -66,7 +66,6 @@ public class VisionPersistenceService {
         prepared.getRoom().getRoomType(),
         prepared.getStored().getPublicPath(),
         prepared.getStored().getOriginalFilename(),
-        prepared.getRoom().getSortOrder() == null ? 0 : prepared.getRoom().getSortOrder(),
         prepared.getUploadedAt().plus(successRetention)
       ));
 

@@ -16,7 +16,6 @@ export async function analyzeVision(rooms) {
   const roomsPayload = rooms.map((room, index) => ({
     room_type: mapRoomType(room.type, index),
     file_index: index,
-    sort_order: index + 1,
   }));
 
   formData.append("rooms", JSON.stringify(roomsPayload));

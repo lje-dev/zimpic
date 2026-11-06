@@ -18,6 +18,4 @@ public class RoomUploadRequest {
   @JsonProperty("file_index")
   private Integer fileIndex;
 
-  @JsonProperty("sort_order")
-  private Integer sortOrder;
 }

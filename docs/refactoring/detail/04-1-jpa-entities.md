@@ -481,8 +481,6 @@ public class VisionImage {
     private String image;
     @ColumnDefault("''") @Column(name = "image_file_name", nullable = false, length = 255)
     private String imageFileName;
-    @ColumnDefault("0") @Column(name = "sort_order", nullable = false)
-    private Integer sortOrder;
     @CreationTimestamp @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
     @Column(name = "expires_at", nullable = false)

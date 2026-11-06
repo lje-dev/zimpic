@@ -37,10 +37,6 @@ public class VisionImage {
   @Column(name = "image_file_name", nullable = false, length = 255)
   private String imageFileName = "";
 
-  @ColumnDefault("0")
-  @Column(name = "sort_order", nullable = false)
-  private Integer sortOrder = 0;
-
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
@@ -48,11 +44,10 @@ public class VisionImage {
   @Column(name = "expires_at", nullable = false)
   private Instant expiresAt;
 
-  public VisionImage(String roomType, String image, String imageFileName, Integer sortOrder, Instant expiresAt) {
+  public VisionImage(String roomType, String image, String imageFileName, Instant expiresAt) {
     this.roomType = roomType;
     this.image = image;
     this.imageFileName = imageFileName;
-    this.sortOrder = sortOrder;
     this.expiresAt = expiresAt;
   }
 
